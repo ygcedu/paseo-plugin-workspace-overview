@@ -187,6 +187,18 @@ function AgentRow({ agent, theme, compact }: { agent: AgentEntry; theme: PluginS
   const activityTooltip = activityAt ? new Date(activityAt).toLocaleString() : "";
 
   const rowBg = statusRowBackground(agent.status, agent.requiresAttention);
+  const [copied, setCopied] = useState(false);
+  const copyFade = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!copied) return;
+    Animated.timing(copyFade, { toValue: 1, duration: 150, easing: Easing.in(Easing.ease), useNativeDriver: true }).start();
+    const timer = setTimeout(() => {
+      Animated.timing(copyFade, { toValue: 0, duration: 300, easing: Easing.out(Easing.ease), useNativeDriver: true }).start();
+      setTimeout(() => setCopied(false), 300);
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [copied, copyFade]);
 
   const styles = useMemo(
     () =>
@@ -220,9 +232,11 @@ function AgentRow({ agent, theme, compact }: { agent: AgentEntry; theme: PluginS
     // best we can do is copy the agent id to the clipboard for manual lookup.
     // Clipboard is not in the plugin client allow-list either, so use the DOM
     // API on web; on native this is a no-op.
-    if (typeof navigator !== "undefined" && (navigator as { clipboard?: { writeText(t: string): Promise<void> } }).clipboard) {
+    const didCopy = typeof navigator !== "undefined" && (navigator as { clipboard?: { writeText(t: string): Promise<void> } }).clipboard;
+    if (didCopy) {
       void (navigator as { clipboard: { writeText(t: string): Promise<void> } }).clipboard.writeText(agent.id);
     }
+    setCopied(true);
   }, [agent.id]);
 
   return (
@@ -244,6 +258,9 @@ function AgentRow({ agent, theme, compact }: { agent: AgentEntry; theme: PluginS
           }
         />
       ) : null}
+        <Animated.View style={[{ position: "absolute", right: 8, top: 0, paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3, backgroundColor: theme.colors.accent + "22" }, { opacity: copyFade }]}>
+          <Text style={{ color: theme.colors.accentForeground, fontSize: 10, fontWeight: "600" as const }}>Copied!</Text>
+        </Animated.View>
       </View>
     </TouchableOpacity>
   );
