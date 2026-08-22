@@ -21,5 +21,16 @@ export default function contribute(plugin: PluginContext) {
     Component: WorkspaceAgentsPanel,
   });
 
+  // Command Center item to open the agents panel (⌘K → search "Workspace Agents")
+  plugin.addCommandCenterItem({
+    id: "open-agents",
+    title: "Workspace Agents",
+    icon: "Users",
+    context: "workspace",
+    onSelect({ openPanel }) {
+      openPanel("agents");
+    },
+  });
+
   return () => {};
 }
