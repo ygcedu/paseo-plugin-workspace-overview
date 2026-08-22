@@ -22,12 +22,14 @@ export function useWorkspaces(hostId: string): UseWorkspacesResult {
     queryKey: ["ws-list", hostId],
     queryFn: () => paseo.workspaces.list({ subscribe: {} }),
     refetchInterval: 5000,
+    staleTime: 3000,
   });
 
   const { data: agResult, isLoading: agLoading } = useQuery({
     queryKey: ["ag-list", hostId],
     queryFn: () => paseo.agents.list({ scope: "active" }),
     refetchInterval: 5000,
+    staleTime: 3000,
   });
 
   const { projects, agentsByWorkspace } = useMemo(() => {
