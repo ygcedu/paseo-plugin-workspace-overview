@@ -152,13 +152,35 @@ function ChevronIcon({ expanded, color, size = 10 }: { expanded: boolean; color:
   );
 }
 
+/**
+ * Semantic status colors, chosen to read clearly on both light and dark themes.
+ * Independent of theme.colors because the theme palette is limited.
+ */
+const STATUS_COLORS = {
+  active: "#22c55e", // green-500: running, needs_input
+  starting: "#3b82f6", // blue-500: initializing
+  danger: "#ef4444", // red-500: error, attention, failed
+  idle: "#9ca3af", // gray-400: everything else
+} as const;
+
+function statusColor(status: string, theme: PluginSurfaceProps["theme"]): string {
+  if (status === "running" || status === "needs_input") return STATUS_COLORS.active;
+  if (status === "initializing") return STATUS_COLORS.starting;
+  if (status === "error" || status === "attention" || status === "failed") return STATUS_COLORS.danger;
+  return theme.colors.foregroundMuted;
+}
+
+/** Row background tint for high-priority statuses; empty string for no tint. */
+export function statusRowBackground(status: string, requiresAttention: boolean | undefined): string {
+  if (status === "error" || status === "attention" || status === "failed") return STATUS_COLORS.danger + "22";
+  if (requiresAttention) return STATUS_COLORS.danger + "18";
+  if (status === "running" || status === "needs_input") return STATUS_COLORS.active + "12";
+  if (status === "initializing") return STATUS_COLORS.starting + "12";
+  return "";
+}
+
 function StatusDot({ status, theme }: { status: string; theme: PluginSurfaceProps["theme"] }) {
-  const color =
-    status === "running" || status === "needs_input"
-      ? theme.colors.accent
-      : status === "attention" || status === "failed" || status === "error"
-        ? theme.colors.statusDanger
-        : theme.colors.foregroundMuted;
+  const color = statusColor(status, theme);
 
   const isActive = status === "running" || status === "needs_input" || status === "initializing";
   const pulse = useRef(new Animated.Value(1)).current;
@@ -223,6 +245,8 @@ function AgentRow({ agent, theme, compact }: { agent: AgentEntry; theme: PluginS
   const activityLabel = formatRelativeTime(activityAt);
   const activityTooltip = activityAt ? new Date(activityAt).toLocaleString() : "";
 
+  const rowBg = statusRowBackground(agent.status, agent.requiresAttention);
+
   const styles = useMemo(
     () =>
       ({
@@ -232,7 +256,7 @@ function AgentRow({ agent, theme, compact }: { agent: AgentEntry; theme: PluginS
           paddingHorizontal: 16,
           paddingLeft: 36, // indented under branch
           paddingVertical: 6,
-          backgroundColor: agent.requiresAttention ? theme.colors.statusDanger + "14" : undefined,
+          backgroundColor: rowBg || undefined,
         } as ViewStyle,
         title: {
           color: theme.colors.foreground,
@@ -245,22 +269,35 @@ function AgentRow({ agent, theme, compact }: { agent: AgentEntry; theme: PluginS
           marginLeft: 8,
         } as TextStyle,
       }),
-    [theme, compact, agent.requiresAttention],
+    [theme, compact, rowBg],
   );
+
+  const handlePress = useCallback(() => {
+    // Paseo plugin SDK has no API to navigate to an agent's session, so the
+    // best we can do is copy the agent id to the clipboard for manual lookup.
+    // Clipboard is not in the plugin client allow-list either, so use the DOM
+    // API on web; on native this is a no-op.
+    if (typeof navigator !== "undefined" && (navigator as { clipboard?: { writeText(t: string): Promise<void> } }).clipboard) {
+      void (navigator as { clipboard: { writeText(t: string): Promise<void> } }).clipboard.writeText(agent.id);
+    }
+  }, [agent.id]);
+
   return (
-    <View style={styles.row}>
-      <StatusDot status={agent.status} theme={theme} />
-      <Text style={styles.title} numberOfLines={1}>
-        {agent.title ?? agent.id.slice(0, 8)}
-      </Text>
-      {activityLabel ? (
+    <TouchableOpacity onPress={handlePress} activeOpacity={0.7}>
+      <View style={styles.row}>
+        <StatusDot status={agent.status} theme={theme} />
+        <Text style={styles.title} numberOfLines={1}>
+          {agent.title ?? agent.id.slice(0, 8)}
+        </Text>
+        {activityLabel ? (
         <BadgeWithTooltip
           label={activityLabel}
           tooltipLines={[{ key: "Last active", value: activityTooltip }]}
           theme={theme}
         />
       ) : null}
-    </View>
+      </View>
+    </TouchableOpacity>
   );
 }
 
@@ -510,6 +547,8 @@ function ProjectCard({
           borderRadius: 12,
           overflow: "hidden" as const,
           marginBottom: CARD_GAP,
+          borderWidth: 1,
+          borderColor: theme.colors.foregroundMuted + "33",
           shadowColor: "#000",
           shadowOpacity: 0.1,
           shadowRadius: 12,
@@ -544,7 +583,7 @@ function ProjectCard({
           marginLeft: 8,
         } as TextStyle,
         body: {
-          paddingVertical: 4,
+          paddingVertical: 0,
         } as ViewStyle,
         divider: {
           height: 1,
