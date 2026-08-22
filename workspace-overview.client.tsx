@@ -883,10 +883,10 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
       >
         <View style={{ paddingHorizontal: horizontalPadding, paddingTop: 12, paddingBottom: 8 }}>
           <Text style={{ color: theme.colors.foreground, fontSize: layout.compact ? 18 : 22, fontWeight: "700" as const }}>
-            All Projects
+            所有项目
           </Text>
           <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12, marginTop: 2 }}>
-            {host.label} · {projects.length} project{projects.length !== 1 ? "s" : ""} · {totalWorkspaces} branch{totalWorkspaces !== 1 ? "es" : ""} · {totalAgents} agent{totalAgents !== 1 ? "s" : ""}
+            {host.label} · {projects.length} 个项目 · {totalWorkspaces} 个分支 · {totalAgents} 个 agent
           </Text>
         </View>
 

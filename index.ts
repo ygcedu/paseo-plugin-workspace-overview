@@ -12,7 +12,7 @@ export default function contribute(plugin: PluginContext) {
   plugin.addSurface("overview", WorkspaceOverview);
   plugin.addSidebarItem({
     id: "overview",
-    title: "Overview",
+    title: "概述",
     icon: "LayoutGrid",
     surface: "overview",
   });
