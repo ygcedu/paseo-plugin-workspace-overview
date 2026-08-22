@@ -17,17 +17,17 @@ const STATUS_COLORS = {
 } as const;
 
 export function statusColor(status: string, theme: PluginSurfaceProps["theme"], requiresAttention?: boolean): string {
-  if (requiresAttention || status === "attention") return STATUS_COLORS.warning;
-  if (status === "running" || status === "needs_input") return STATUS_COLORS.active;
+  if (requiresAttention || status === "attention" || status === "needs_input") return STATUS_COLORS.pending;
+  if (status === "running") return STATUS_COLORS.active;
   if (status === "initializing") return STATUS_COLORS.starting;
   if (status === "error" || status === "failed") return STATUS_COLORS.danger;
   return theme.colors.foregroundMuted;
 }
 
 export function statusRowBackground(status: string, requiresAttention: boolean | undefined): string {
-  if (requiresAttention || status === "attention") return STATUS_COLORS.warning + "18";
+  if (requiresAttention || status === "attention" || status === "needs_input") return STATUS_COLORS.pending + "18";
   if (status === "error" || status === "failed") return STATUS_COLORS.danger + "22";
-  if (status === "running" || status === "needs_input") return STATUS_COLORS.active + "12";
+  if (status === "running") return STATUS_COLORS.active + "12";
   if (status === "initializing") return STATUS_COLORS.starting + "12";
   return "";
 }
