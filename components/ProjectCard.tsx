@@ -26,6 +26,7 @@ export function ProjectCard({
   cardExpanded,
   onToggleCard,
   onToggleBranch,
+  onOpenDirectory,
   theme,
   compact,
   width,
@@ -143,6 +144,7 @@ export function ProjectCard({
                 agents={wsAgents}
                 expanded={isExpanded}
                 onToggle={() => onToggleBranch(ws.id, isExpanded)}
+                onOpenDirectory={() => onOpenDirectory(ws.workspaceDirectory)}
                 theme={theme}
                 compact={compact}
                 hostLabel={hostLabel}

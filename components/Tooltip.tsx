@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef } from "react";
-import { Animated, Easing, Text, View, type ViewStyle, type TextStyle } from "react-native";
+import { Animated, Easing, Text, TouchableOpacity, View, type ViewStyle, type TextStyle } from "react-native";
 import { type PluginSurfaceProps } from "@getpaseo/plugin";
 import { type TooltipState, type TooltipContextValue, type TooltipLine } from "../overview.types";
 
@@ -8,10 +8,11 @@ import { type TooltipState, type TooltipContextValue, type TooltipLine } from ".
  * Independent of theme.colors because the theme palette is limited.
  */
 const STATUS_COLORS = {
-  active: "#22c55e", // green-500: running, needs_input
+  active: "#60a5fa", // light blue: running
+  pending: "#86efac", // light green: needs_input, attention
   starting: "#3b82f6", // blue-500: initializing
   danger: "#ef4444", // red-500: error, failed
-  warning: "#f97316", // orange-500: attention / requiresAttention
+  warning: "#f97316", // orange-500: attention / requiresAttention (legacy)
   idle: "#9ca3af", // gray-400: everything else
 } as const;
 
@@ -59,6 +60,7 @@ export function BadgeWithTooltip({
   theme,
   color,
   pulsing,
+  onPress,
 }: {
   label: string;
   tooltipLines: TooltipLine[];
@@ -68,6 +70,8 @@ export function BadgeWithTooltip({
   color?: string;
   /** Pulse the badge opacity — used for active (running/initializing) statuses. */
   pulsing?: boolean;
+  /** Called when the badge is clicked/tapped. */
+  onPress?: () => void;
 }) {
   const tooltipCtx = useTooltip();
   const wrapperRef = useRef<View | null>(null);
@@ -135,10 +139,15 @@ export function BadgeWithTooltip({
     tooltipCtx?.hide();
   }, [tooltipCtx]);
 
+  const handlePress = React.useCallback(() => {
+    onPress?.();
+  }, [onPress]);
+
   return (
-    <View
+    <TouchableOpacity
       ref={wrapperRef}
       style={styles.wrapper}
+      onPress={handlePress}
       {...({
         onMouseEnter: handleEnter,
         onMouseLeave: handleLeave,
@@ -147,6 +156,6 @@ export function BadgeWithTooltip({
       <Animated.View style={[styles.badge, pulsing ? { opacity: pulse } : null]}>
         <Text style={styles.badgeText}>{label}</Text>
       </Animated.View>
-    </View>
+    </TouchableOpacity>
   );
 }

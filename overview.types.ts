@@ -70,6 +70,7 @@ export interface ProjectCardProps {
   cardExpanded: Record<string, boolean>;
   onToggleCard: (projectId: string, currentEffective: boolean) => void;
   onToggleBranch: (workspaceId: string, currentEffective: boolean) => void;
+  onOpenDirectory: (directory: string) => void;
   theme: PluginSurfaceProps["theme"];
   compact: boolean;
   width: number;

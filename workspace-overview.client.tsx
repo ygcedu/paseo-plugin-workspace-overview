@@ -16,7 +16,13 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
   const surfaceRef = useRef<View | null>(null);
   const surfaceOrigin = useRef({ x: 0, y: 0 });
 
+  const paseo = usePaseo();
+
   const { projects, agentsByWorkspace, isLoading, error, refetch } = useWorkspaces(host.id);
+
+  const handleOpenDirectory = useCallback((directory: string) => {
+    void paseo.workspaces.open(directory);
+  }, [paseo]);
 
   const handleContainerLayout = useCallback((e: LayoutChangeEvent) => {
     setContainerWidth(e.nativeEvent.layout.width);
@@ -197,6 +203,7 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
                     cardExpanded={cardExpanded}
                     onToggleCard={handleToggleCard}
                     onToggleBranch={handleToggleBranch}
+                    onOpenDirectory={handleOpenDirectory}
                     theme={theme}
                     compact={layout.compact}
                     width={cardWidth}

@@ -10,6 +10,7 @@ export function BranchRow({
   agents,
   expanded,
   onToggle,
+  onOpenDirectory,
   theme,
   compact,
   hostLabel,
@@ -18,6 +19,7 @@ export function BranchRow({
   agents: AgentEntry[];
   expanded: boolean;
   onToggle: () => void;
+  onOpenDirectory?: () => void;
   theme: PluginSurfaceProps["theme"];
   compact: boolean;
   hostLabel: string;
@@ -90,6 +92,7 @@ export function BranchRow({
             workspace.status === "needs_input" ||
             workspace.status === "initializing"
           }
+          onPress={onOpenDirectory}
         />
       </View>
     </TouchableOpacity>
