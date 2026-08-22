@@ -194,8 +194,10 @@ function AgentRow({ agent, theme, compact }: { agent: AgentEntry; theme: PluginS
         row: {
           flexDirection: "row" as const,
           alignItems: "center" as const,
-          paddingHorizontal: 16,
-          paddingLeft: 36, // indented under branch
+          // Keep left edge aligned with the branch name above (12 padding + 16 chevron + 4 gap),
+          // and right edge aligned with the branch row's trailing badge.
+          paddingHorizontal: 12,
+          paddingLeft: 32,
           paddingVertical: 6,
           backgroundColor: rowBg || undefined,
         } as ViewStyle,
@@ -552,7 +554,7 @@ function ProjectCard({
         } as ViewStyle,
         headerChevron: {
           width: 16,
-          marginRight: 6,
+          marginRight: 4,
           alignItems: "center" as const,
           justifyContent: "center" as const,
         } as ViewStyle,
@@ -625,7 +627,7 @@ function ProjectCard({
                   <AgentRow key={agent.id} agent={agent} theme={theme} compact={compact} />
                 ))}
               {isExpanded && wsAgents.length === 0 && (
-                <View style={{ paddingHorizontal: 36, paddingVertical: 6 }}>
+                <View style={{ paddingLeft: 32, paddingRight: 12, paddingVertical: 6 }}>
                   <Text style={{ color: theme.colors.foregroundMuted, fontSize: 11 }}>
                     No agents in this branch.
                   </Text>
