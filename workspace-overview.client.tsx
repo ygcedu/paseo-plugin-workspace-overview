@@ -1,6 +1,13 @@
 import { type PluginSurfaceProps, usePaseo } from "@getpaseo/plugin";
 import { useQuery } from "@tanstack/react-query";
-import React, { useCallback, useMemo, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ScrollView,
   Text,
@@ -29,7 +36,9 @@ interface WorkspaceEntry {
   projectDisplayName: string;
   name: string;
   status: WorkspaceStatus;
+  statusEnteredAt?: string | null;
   workspaceKind: "directory" | "local_checkout" | "checkout" | "worktree";
+  directory: string;
   gitRuntime?: { currentBranch?: string | null } | null;
 }
 
@@ -40,8 +49,39 @@ interface AgentEntry {
   provider: string;
   model: string | null;
   status: "initializing" | "idle" | "running" | "error" | "closed" | string;
+  updatedAt?: string;
+  lastUserMessageAt?: string | null;
   requiresAttention?: boolean;
   attentionReason?: "finished" | "error" | "permission" | null;
+}
+
+/** Format an ISO timestamp as a compact relative time like "3m ago" / "2h ago" / "5d ago". */
+function formatRelativeTime(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const diffMs = Date.now() - then;
+  if (diffMs < 0) return "just now";
+  const sec = Math.floor(diffMs / 1000);
+  if (sec < 60) return "just now";
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hour = Math.floor(min / 60);
+  if (hour < 24) return `${hour}h ago`;
+  const day = Math.floor(hour / 24);
+  if (day < 30) return `${day}d ago`;
+  const month = Math.floor(day / 30);
+  if (month < 12) return `${month}mo ago`;
+  const year = Math.floor(month / 12);
+  return `${year}y ago`;
+}
+
+/** Extract the last path segment for compact display. */
+function basename(path: string): string {
+  if (!path) return "";
+  const trimmed = path.replace(/[/\\]+$/, "");
+  const idx = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+  return idx >= 0 ? trimmed.slice(idx + 1) : trimmed;
 }
 
 /**
@@ -130,6 +170,10 @@ function StatusDot({ status, theme }: { status: string; theme: PluginSurfaceProp
 }
 
 function AgentRow({ agent, theme, compact }: { agent: AgentEntry; theme: PluginSurfaceProps["theme"]; compact: boolean }) {
+  const activityAt = agent.lastUserMessageAt ?? agent.updatedAt;
+  const activityLabel = formatRelativeTime(activityAt);
+  const activityTooltip = activityAt ? new Date(activityAt).toLocaleString() : "";
+
   const styles = useMemo(
     () =>
       ({
@@ -160,10 +204,112 @@ function AgentRow({ agent, theme, compact }: { agent: AgentEntry; theme: PluginS
       <Text style={styles.title} numberOfLines={1}>
         {agent.title ?? agent.id.slice(0, 8)}
       </Text>
-      <Text style={styles.meta} numberOfLines={1}>
-        {agent.provider}
-        {agent.model ? `/${agent.model}` : ""}
-      </Text>
+      {activityLabel ? (
+        <BadgeWithTooltip
+          label={activityLabel}
+          tooltipLines={[{ key: "Last active", value: activityTooltip }]}
+          theme={theme}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+const KIND_LABEL: Record<WorkspaceEntry["workspaceKind"], string> = {
+  worktree: "Worktree",
+  checkout: "Checkout",
+  local_checkout: "Local",
+  directory: "Dir",
+};
+
+interface TooltipLine {
+  key: string;
+  value: string;
+}
+
+interface TooltipState {
+  /** Window coordinates of the badge's right edge. */
+  x: number;
+  /** Window Y of the badge's bottom edge. */
+  y: number;
+  lines: TooltipLine[];
+}
+
+interface TooltipContextValue {
+  show: (state: TooltipState) => void;
+  hide: () => void;
+}
+
+const TooltipContext = createContext<TooltipContextValue | null>(null);
+
+/**
+ * A badge that, on hover, asks the surface root to render a tooltip near the
+ * badge. Rendering at the root avoids being clipped by the card's
+ * `overflow: hidden`.
+ *
+ * Uses RN Web's `onMouseEnter`/`onMouseLeave` (not in the RN type defs) and
+ * `measureInWindow` to compute window coordinates.
+ */
+function BadgeWithTooltip({
+  label,
+  tooltipLines,
+  theme,
+}: {
+  label: string;
+  tooltipLines: TooltipLine[];
+  theme: PluginSurfaceProps["theme"];
+}) {
+  const tooltipCtx = useContext(TooltipContext);
+  const wrapperRef = useRef<View | null>(null);
+
+  const styles = useMemo(
+    () =>
+      ({
+        wrapper: {
+          marginLeft: 8,
+          flexShrink: 0,
+        } as ViewStyle,
+        badge: {
+          paddingHorizontal: 6,
+          paddingVertical: 2,
+          borderRadius: 4,
+          backgroundColor: theme.colors.foregroundMuted + "14",
+        } as ViewStyle,
+        badgeText: {
+          color: theme.colors.foregroundMuted,
+          fontSize: 10,
+        } as TextStyle,
+      }),
+    [theme],
+  );
+
+  const handleEnter = useCallback(() => {
+    if (!tooltipCtx || !wrapperRef.current) return;
+    wrapperRef.current.measureInWindow((x, y, width, height) => {
+      tooltipCtx.show({
+        x: x + width,
+        y: y + height,
+        lines: tooltipLines,
+      });
+    });
+  }, [tooltipCtx, tooltipLines]);
+
+  const handleLeave = useCallback(() => {
+    tooltipCtx?.hide();
+  }, [tooltipCtx]);
+
+  return (
+    <View
+      ref={wrapperRef}
+      style={styles.wrapper}
+      {...({
+        onMouseEnter: handleEnter,
+        onMouseLeave: handleLeave,
+      } as Record<string, unknown>)}
+    >
+      <View style={styles.badge}>
+        <Text style={styles.badgeText}>{label}</Text>
+      </View>
     </View>
   );
 }
@@ -175,6 +321,7 @@ function BranchRow({
   onToggle,
   theme,
   compact,
+  hostLabel,
 }: {
   workspace: WorkspaceEntry;
   agents: AgentEntry[];
@@ -182,6 +329,7 @@ function BranchRow({
   onToggle: () => void;
   theme: PluginSurfaceProps["theme"];
   compact: boolean;
+  hostLabel: string;
 }) {
   const branchLabel = useMemo(() => {
     const b = workspace.gitRuntime?.currentBranch;
@@ -210,23 +358,27 @@ function BranchRow({
           fontWeight: "500" as const,
           flex: 1,
         } as TextStyle,
-        kind: {
-          color: theme.colors.foregroundMuted,
-          fontSize: 10,
-          marginLeft: 8,
-          paddingHorizontal: 6,
-          paddingVertical: 2,
-          borderRadius: 4,
-          backgroundColor: theme.colors.foregroundMuted + "14",
-        } as TextStyle,
-        meta: {
-          color: theme.colors.foregroundMuted,
-          fontSize: 11,
-          marginLeft: 8,
-        } as TextStyle,
       }),
     [theme],
   );
+
+  // Compose tooltip content as key/value rows.
+  const tooltipLines = useMemo(() => {
+    const lines: Array<{ key: string; value: string }> = [
+      { key: "Kind", value: KIND_LABEL[workspace.workspaceKind] ?? workspace.workspaceKind },
+      { key: "Branch", value: branchLabel },
+      { key: "Directory", value: workspace.directory },
+      { key: "Host", value: hostLabel },
+      { key: "Status", value: workspace.status },
+    ];
+    if (workspace.statusEnteredAt) {
+      lines.push({ key: "Since", value: new Date(workspace.statusEnteredAt).toLocaleString() });
+    }
+    if (agents.length > 0) {
+      lines.push({ key: "Agents", value: String(agents.length) });
+    }
+    return lines;
+  }, [workspace, branchLabel, hostLabel, agents.length]);
 
   return (
     <TouchableOpacity onPress={onToggle} activeOpacity={0.7}>
@@ -238,12 +390,11 @@ function BranchRow({
         <Text style={styles.name} numberOfLines={1}>
           {branchLabel}
         </Text>
-        {workspace.workspaceKind === "worktree" && <Text style={styles.kind}>worktree</Text>}
-        {agents.length > 0 && (
-          <Text style={styles.meta}>
-            {agents.length} agent{agents.length !== 1 ? "s" : ""}
-          </Text>
-        )}
+        <BadgeWithTooltip
+          label={KIND_LABEL[workspace.workspaceKind] ?? workspace.workspaceKind}
+          tooltipLines={tooltipLines}
+          theme={theme}
+        />
       </View>
     </TouchableOpacity>
   );
@@ -259,6 +410,7 @@ interface ProjectCardProps {
   theme: PluginSurfaceProps["theme"];
   compact: boolean;
   width: number;
+  hostLabel: string;
 }
 
 function ProjectCard({
@@ -270,6 +422,7 @@ function ProjectCard({
   theme,
   compact,
   width,
+  hostLabel,
 }: ProjectCardProps) {
   const styles = useMemo(
     () =>
@@ -349,6 +502,7 @@ function ProjectCard({
                 onToggle={() => onToggleBranch(ws.id)}
                 theme={theme}
                 compact={compact}
+                hostLabel={hostLabel}
               />
               {isExpanded &&
                 wsAgents.map((agent) => (
@@ -373,6 +527,24 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
   const paseo = usePaseo();
   const [containerWidth, setContainerWidth] = useState(0);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null);
+  const [surfaceSize, setSurfaceSize] = useState({ width: 0, height: 0 });
+  const surfaceRef = useRef<View | null>(null);
+  const surfaceOrigin = useRef({ x: 0, y: 0 });
+
+  const showTooltip = useCallback((state: TooltipState) => setTooltip(state), []);
+  const hideTooltip = useCallback(() => setTooltip(null), []);
+  const tooltipCtxValue = useMemo(
+    () => ({ show: showTooltip, hide: hideTooltip }),
+    [showTooltip, hideTooltip],
+  );
+
+  const measureSurface = useCallback(() => {
+    surfaceRef.current?.measureInWindow((x, y, width, height) => {
+      surfaceOrigin.current = { x, y };
+      setSurfaceSize({ width, height });
+    });
+  }, []);
 
   const { data: wsResult, isLoading: wsLoading, error: wsError, refetch } = useQuery({
     queryKey: ["ws-list", host.id],
@@ -476,62 +648,151 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
   const totalAgents = (agResult?.entries ?? []).length;
   const horizontalPadding = layout.compact ? 12 : 20;
 
-  return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.surface0 }}>
-      <View style={{ paddingHorizontal: horizontalPadding, paddingTop: 12, paddingBottom: 8 }}>
-        <Text style={{ color: theme.colors.foreground, fontSize: layout.compact ? 18 : 22, fontWeight: "700" as const }}>
-          All Projects
-        </Text>
-        <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12, marginTop: 2 }}>
-          {host.label} · {projects.length} project{projects.length !== 1 ? "s" : ""} · {totalWorkspaces} branch{totalWorkspaces !== 1 ? "es" : ""} · {totalAgents} agent{totalAgents !== 1 ? "s" : ""}
-        </Text>
-      </View>
+  // Tooltip dimensions (approximate; we clamp position so it stays inside the surface).
+  const TOOLTIP_WIDTH = 280;
+  const TOOLTIP_EST_HEIGHT = tooltip ? 24 + tooltip.lines.length * 18 : 0;
 
-      {projects.length === 0 ? (
-        <View style={{ flex: 1, alignItems: "center" as const, justifyContent: "center" as const, padding: 24 }}>
-          <Text style={{ color: theme.colors.foregroundMuted, textAlign: "center" as const }}>
-            No projects found.
+  const tooltipPos = useMemo(() => {
+    if (!tooltip) return null;
+    // measureInWindow returns window coords; convert to surface-local coords.
+    const localX = tooltip.x - surfaceOrigin.current.x;
+    const localY = tooltip.y - surfaceOrigin.current.y;
+    let left = localX - TOOLTIP_WIDTH; // right-align with badge
+    let top = localY + 6;
+    // Clamp horizontally inside the surface.
+    if (surfaceSize.width > 0) {
+      if (left + TOOLTIP_WIDTH > surfaceSize.width - 8) {
+        left = surfaceSize.width - TOOLTIP_WIDTH - 8;
+      }
+      if (left < 8) left = 8;
+    }
+    // Flip above the badge if there's not enough room below.
+    if (surfaceSize.height > 0 && top + TOOLTIP_EST_HEIGHT > surfaceSize.height - 8) {
+      top = Math.max(8, localY - TOOLTIP_EST_HEIGHT - 6);
+    }
+    return { left, top };
+  }, [tooltip, surfaceSize, TOOLTIP_EST_HEIGHT]);
+
+  const tooltipStyles = useMemo(
+    () =>
+      ({
+        container: {
+          position: "absolute" as const,
+          width: TOOLTIP_WIDTH,
+          paddingHorizontal: 12,
+          paddingVertical: 10,
+          borderRadius: 8,
+          backgroundColor: theme.colors.foreground,
+          shadowColor: "#000",
+          shadowOpacity: 0.25,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 6 },
+          elevation: 12,
+          zIndex: 9999,
+        } as ViewStyle,
+        row: {
+          flexDirection: "row" as const,
+          marginBottom: 4,
+        } as ViewStyle,
+        key: {
+          color: theme.colors.surface0,
+          opacity: 0.6,
+          fontSize: 11,
+          width: 72,
+          flexShrink: 0,
+        } as TextStyle,
+        value: {
+          color: theme.colors.surface0,
+          fontSize: 11,
+          flex: 1,
+          fontWeight: "500" as const,
+        } as TextStyle,
+      }),
+    [theme],
+  );
+
+  return (
+    <TooltipContext.Provider value={tooltipCtxValue}>
+      <View
+        ref={surfaceRef}
+        style={{ flex: 1, backgroundColor: theme.colors.surface0 }}
+        onLayout={measureSurface}
+      >
+        <View style={{ paddingHorizontal: horizontalPadding, paddingTop: 12, paddingBottom: 8 }}>
+          <Text style={{ color: theme.colors.foreground, fontSize: layout.compact ? 18 : 22, fontWeight: "700" as const }}>
+            All Projects
+          </Text>
+          <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12, marginTop: 2 }}>
+            {host.label} · {projects.length} project{projects.length !== 1 ? "s" : ""} · {totalWorkspaces} branch{totalWorkspaces !== 1 ? "es" : ""} · {totalAgents} agent{totalAgents !== 1 ? "s" : ""}
           </Text>
         </View>
-      ) : (
-        <ScrollView
-          contentContainerStyle={{
-            paddingHorizontal: horizontalPadding,
-            paddingBottom: 24,
-            paddingTop: 4,
-          }}
-        >
-          <View
-            onLayout={handleContainerLayout}
-            style={{
-              flexDirection: "row" as const,
-              flexWrap: "wrap" as const,
-              justifyContent: "space-between" as const,
-              alignItems: "flex-start" as const,
+
+        {projects.length === 0 ? (
+          <View style={{ flex: 1, alignItems: "center" as const, justifyContent: "center" as const, padding: 24 }}>
+            <Text style={{ color: theme.colors.foregroundMuted, textAlign: "center" as const }}>
+              No projects found.
+            </Text>
+          </View>
+        ) : (
+          <ScrollView
+            contentContainerStyle={{
+              paddingHorizontal: horizontalPadding,
+              paddingBottom: 24,
+              paddingTop: 4,
             }}
           >
-            {cardWidth > 0 &&
-              projects.map((project) => (
-                <ProjectCard
-                  key={project.projectId}
-                  projectId={project.projectId}
-                  projectDisplayName={project.projectDisplayName}
-                  workspaces={project.workspaces}
-                  agentsByWorkspace={agentsByWorkspace}
-                  expanded={expanded}
-                  onToggleBranch={handleToggleBranch}
-                  theme={theme}
-                  compact={layout.compact}
-                  width={cardWidth}
-                />
-              ))}
-            {columns > 1 &&
-              Array.from({ length: columns - 1 }).map((_, i) => (
-                <View key={`spacer-${i}`} style={{ width: cardWidth }} />
-              ))}
+            <View
+              onLayout={handleContainerLayout}
+              style={{
+                flexDirection: "row" as const,
+                flexWrap: "wrap" as const,
+                justifyContent: "space-between" as const,
+                alignItems: "flex-start" as const,
+              }}
+            >
+              {cardWidth > 0 &&
+                projects.map((project) => (
+                  <ProjectCard
+                    key={project.projectId}
+                    projectId={project.projectId}
+                    projectDisplayName={project.projectDisplayName}
+                    workspaces={project.workspaces}
+                    agentsByWorkspace={agentsByWorkspace}
+                    expanded={expanded}
+                    onToggleBranch={handleToggleBranch}
+                    theme={theme}
+                    compact={layout.compact}
+                    width={cardWidth}
+                    hostLabel={host.label}
+                  />
+                ))}
+              {columns > 1 &&
+                Array.from({ length: columns - 1 }).map((_, i) => (
+                  <View key={`spacer-${i}`} style={{ width: cardWidth }} />
+                ))}
+            </View>
+          </ScrollView>
+        )}
+
+        {tooltip && tooltipPos && (
+          <View
+            style={[tooltipStyles.container, { left: tooltipPos.left, top: tooltipPos.top }]}
+            pointerEvents="none"
+          >
+            {tooltip.lines.map((line, i) => (
+              <View
+                key={i}
+                style={[tooltipStyles.row, i === tooltip.lines.length - 1 && { marginBottom: 0 }]}
+              >
+                <Text style={tooltipStyles.key}>{line.key}</Text>
+                <Text style={tooltipStyles.value} numberOfLines={3}>
+                  {line.value}
+                </Text>
+              </View>
+            ))}
           </View>
-        </ScrollView>
-      )}
-    </View>
+        )}
+      </View>
+    </TooltipContext.Provider>
   );
 }
