@@ -159,85 +159,26 @@ function ChevronIcon({ expanded, color, size = 10 }: { expanded: boolean; color:
 const STATUS_COLORS = {
   active: "#22c55e", // green-500: running, needs_input
   starting: "#3b82f6", // blue-500: initializing
-  danger: "#ef4444", // red-500: error, attention, failed
+  danger: "#ef4444", // red-500: error, failed
+  warning: "#f97316", // orange-500: attention / requiresAttention
   idle: "#9ca3af", // gray-400: everything else
 } as const;
 
-function statusColor(status: string, theme: PluginSurfaceProps["theme"]): string {
+function statusColor(status: string, theme: PluginSurfaceProps["theme"], requiresAttention?: boolean): string {
+  if (requiresAttention || status === "attention") return STATUS_COLORS.warning;
   if (status === "running" || status === "needs_input") return STATUS_COLORS.active;
   if (status === "initializing") return STATUS_COLORS.starting;
-  if (status === "error" || status === "attention" || status === "failed") return STATUS_COLORS.danger;
+  if (status === "error" || status === "failed") return STATUS_COLORS.danger;
   return theme.colors.foregroundMuted;
 }
 
 /** Row background tint for high-priority statuses; empty string for no tint. */
 export function statusRowBackground(status: string, requiresAttention: boolean | undefined): string {
-  if (status === "error" || status === "attention" || status === "failed") return STATUS_COLORS.danger + "22";
-  if (requiresAttention) return STATUS_COLORS.danger + "18";
+  if (requiresAttention || status === "attention") return STATUS_COLORS.warning + "18";
+  if (status === "error" || status === "failed") return STATUS_COLORS.danger + "22";
   if (status === "running" || status === "needs_input") return STATUS_COLORS.active + "12";
   if (status === "initializing") return STATUS_COLORS.starting + "12";
   return "";
-}
-
-function StatusDot({ status, theme }: { status: string; theme: PluginSurfaceProps["theme"] }) {
-  const color = statusColor(status, theme);
-
-  const isActive = status === "running" || status === "needs_input" || status === "initializing";
-  const pulse = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    if (!isActive) {
-      pulse.setValue(1);
-      return;
-    }
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, {
-          toValue: 0.25,
-          duration: 700,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulse, {
-          toValue: 1,
-          duration: 700,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [isActive, pulse]);
-
-  if (isActive) {
-    return (
-      <Animated.View
-        style={{
-          width: 8,
-          height: 8,
-          borderRadius: 4,
-          backgroundColor: color,
-          marginRight: 8,
-          flexShrink: 0,
-          opacity: pulse,
-        }}
-      />
-    );
-  }
-
-  return (
-    <View
-      style={{
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: color,
-        marginRight: 8,
-        flexShrink: 0,
-      }}
-    />
-  );
 }
 
 function AgentRow({ agent, theme, compact }: { agent: AgentEntry; theme: PluginSurfaceProps["theme"]; compact: boolean }) {
@@ -285,7 +226,6 @@ function AgentRow({ agent, theme, compact }: { agent: AgentEntry; theme: PluginS
   return (
     <TouchableOpacity onPress={handlePress} activeOpacity={0.7}>
       <View style={styles.row}>
-        <StatusDot status={agent.status} theme={theme} />
         <Text style={styles.title} numberOfLines={1}>
           {agent.title ?? agent.id.slice(0, 8)}
         </Text>
@@ -294,6 +234,12 @@ function AgentRow({ agent, theme, compact }: { agent: AgentEntry; theme: PluginS
           label={activityLabel}
           tooltipLines={[{ key: "Last active", value: activityTooltip }]}
           theme={theme}
+          color={statusColor(agent.status, theme, agent.requiresAttention)}
+          pulsing={
+            agent.status === "running" ||
+            agent.status === "needs_input" ||
+            agent.status === "initializing"
+          }
         />
       ) : null}
       </View>
@@ -340,13 +286,46 @@ function BadgeWithTooltip({
   label,
   tooltipLines,
   theme,
+  color,
+  pulsing,
 }: {
   label: string;
   tooltipLines: TooltipLine[];
   theme: PluginSurfaceProps["theme"];
+  /** Optional semantic color; when provided, the badge uses it as a tinted
+   *  background with matching foreground. Falls back to neutral gray. */
+  color?: string;
+  /** Pulse the badge opacity — used for active (running/initializing) statuses. */
+  pulsing?: boolean;
 }) {
   const tooltipCtx = useContext(TooltipContext);
   const wrapperRef = useRef<View | null>(null);
+  const pulse = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (!pulsing) {
+      pulse.setValue(1);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 0.45,
+          duration: 800,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 800,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulsing, pulse]);
 
   const styles = useMemo(
     () =>
@@ -359,14 +338,15 @@ function BadgeWithTooltip({
           paddingHorizontal: 6,
           paddingVertical: 2,
           borderRadius: 4,
-          backgroundColor: theme.colors.foregroundMuted + "14",
+          backgroundColor: color ? color + "22" : theme.colors.foregroundMuted + "14",
         } as ViewStyle,
         badgeText: {
-          color: theme.colors.foregroundMuted,
+          color: color ?? theme.colors.foregroundMuted,
           fontSize: 10,
+          fontWeight: color ? ("600" as const) : ("400" as const),
         } as TextStyle,
       }),
-    [theme],
+    [theme, color],
   );
 
   const handleEnter = useCallback(() => {
@@ -393,9 +373,9 @@ function BadgeWithTooltip({
         onMouseLeave: handleLeave,
       } as Record<string, unknown>)}
     >
-      <View style={styles.badge}>
+      <Animated.View style={[styles.badge, pulsing ? { opacity: pulse } : null]}>
         <Text style={styles.badgeText}>{label}</Text>
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -472,7 +452,6 @@ function BranchRow({
         <View style={styles.chevron}>
           <ChevronIcon expanded={expanded} color={theme.colors.foregroundMuted} size={10} />
         </View>
-        <StatusDot status={workspace.status} theme={theme} />
         <Text style={styles.name} numberOfLines={1}>
           {branchLabel}
         </Text>
@@ -480,6 +459,12 @@ function BranchRow({
           label={KIND_LABEL[workspace.workspaceKind] ?? workspace.workspaceKind}
           tooltipLines={tooltipLines}
           theme={theme}
+          color={statusColor(workspace.status, theme)}
+          pulsing={
+            workspace.status === "running" ||
+            workspace.status === "needs_input" ||
+            workspace.status === "initializing"
+          }
         />
       </View>
     </TouchableOpacity>
