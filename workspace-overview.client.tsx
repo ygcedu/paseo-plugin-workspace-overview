@@ -515,11 +515,18 @@ function ProjectCard({
 }: ProjectCardProps) {
   // Card-level expand: explicit user toggle wins; otherwise auto-expand when
   // any branch contains a running/errored/attention agent.
+  // Derive only the agents arrays relevant to this project's workspaces,
+  // avoiding a dependency on the entire agentsByWorkspace Map.
+  const projectAgentsArrays = useMemo(
+    () => workspaces.map((ws) => agentsByWorkspace.get(ws.id) ?? []),
+    [workspaces, agentsByWorkspace],
+  );
+
   const cardIsExpanded = useMemo(() => {
     const explicit = cardExpanded[projectId];
     if (explicit !== undefined) return explicit;
-    return workspaces.some((ws) => (agentsByWorkspace.get(ws.id) ?? []).some(shouldAutoExpandAgent));
-  }, [cardExpanded, projectId, workspaces, agentsByWorkspace]);
+    return projectAgentsArrays.some((agents) => agents.some(shouldAutoExpandAgent));
+  }, [cardExpanded, projectId, projectAgentsArrays]);
 
   const toggleCard = useCallback(
     () => onToggleCard(projectId, cardIsExpanded),
