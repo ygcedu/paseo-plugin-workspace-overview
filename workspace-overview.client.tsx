@@ -21,43 +21,11 @@ import {
   type TextStyle,
 } from "react-native";
 
+import { type WorkspaceEntry, type AgentEntry, type TooltipState, type TooltipContextValue, type TooltipLine, type ProjectCardProps, KIND_LABEL } from "./overview.types";
+
 const CARD_GAP = 16;
 const CARD_TARGET_WIDTH = 360;
 const CARD_MIN_WIDTH = 280;
-
-type WorkspaceStatus =
-  | "needs_input"
-  | "failed"
-  | "running"
-  | "attention"
-  | "done"
-  | string;
-
-interface WorkspaceEntry {
-  id: string;
-  projectId: string;
-  projectDisplayName: string;
-  name: string;
-  status: WorkspaceStatus;
-  statusEnteredAt?: string | null;
-  activityAt?: string | null;
-  workspaceKind: "directory" | "local_checkout" | "checkout" | "worktree";
-  directory: string;
-  gitRuntime?: { currentBranch?: string | null } | null;
-}
-
-interface AgentEntry {
-  id: string;
-  workspaceId?: string;
-  title: string | null;
-  provider: string;
-  model: string | null;
-  status: "initializing" | "idle" | "running" | "error" | "closed" | string;
-  updatedAt?: string;
-  lastUserMessageAt?: string | null;
-  requiresAttention?: boolean;
-  attentionReason?: "finished" | "error" | "permission" | null;
-}
 
 /** Format an ISO timestamp as a compact relative time like "3m ago" / "2h ago" / "5d ago". */
 function formatRelativeTime(iso: string | null | undefined): string {
@@ -266,31 +234,6 @@ function AgentRow({ agent, theme, compact }: { agent: AgentEntry; theme: PluginS
   );
 }
 
-const KIND_LABEL: Record<WorkspaceEntry["workspaceKind"], string> = {
-  worktree: "Worktree",
-  checkout: "Checkout",
-  local_checkout: "Local",
-  directory: "Dir",
-};
-
-interface TooltipLine {
-  key: string;
-  value: string;
-}
-
-interface TooltipState {
-  /** Window coordinates of the badge's right edge. */
-  x: number;
-  /** Window Y of the badge's bottom edge. */
-  y: number;
-  lines: TooltipLine[];
-}
-
-interface TooltipContextValue {
-  show: (state: TooltipState) => void;
-  hide: () => void;
-}
-
 const TooltipContext = createContext<TooltipContextValue | null>(null);
 
 /**
@@ -488,23 +431,6 @@ function BranchRow({
       </View>
     </TouchableOpacity>
   );
-}
-
-interface ProjectCardProps {
-  projectId: string;
-  projectDisplayName: string;
-  workspaces: WorkspaceEntry[];
-  agentsByWorkspace: Map<string, AgentEntry[]>;
-  /** Branch-level expand state. undefined means "user hasn't toggled; use auto rule". */
-  expanded: Record<string, boolean>;
-  /** Card-level expand state. Same undefined semantics as expanded. */
-  cardExpanded: Record<string, boolean>;
-  onToggleCard: (projectId: string, currentEffective: boolean) => void;
-  onToggleBranch: (workspaceId: string, currentEffective: boolean) => void;
-  theme: PluginSurfaceProps["theme"];
-  compact: boolean;
-  width: number;
-  hostLabel: string;
 }
 
 /** Decide whether an agent should auto-expand its surroundings on first view. */
