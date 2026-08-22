@@ -40,6 +40,7 @@ interface WorkspaceEntry {
   name: string;
   status: WorkspaceStatus;
   statusEnteredAt?: string | null;
+  activityAt?: string | null;
   workspaceKind: "directory" | "local_checkout" | "checkout" | "worktree";
   directory: string;
   gitRuntime?: { currentBranch?: string | null } | null;
@@ -679,6 +680,13 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
     const workspaces = (wsResult?.entries ?? []) as WorkspaceEntry[];
     const agents = (agResult?.entries ?? []) as Array<{ agent: AgentEntry }>;
 
+    // Activity timestamp (ms) for an agent; 0 when unknown (sorts last).
+    const agentActivity = (a: AgentEntry): number => {
+      const iso = a.lastUserMessageAt ?? a.updatedAt;
+      const t = iso ? new Date(iso).getTime() : 0;
+      return Number.isNaN(t) ? 0 : t;
+    };
+
     const agentsByWs = new Map<string, AgentEntry[]>();
     for (const entry of agents) {
       const wsId = entry.agent.workspaceId;
@@ -686,6 +694,10 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
       const list = agentsByWs.get(wsId) ?? [];
       list.push(entry.agent);
       agentsByWs.set(wsId, list);
+    }
+    // Sort agents inside each workspace by last activity, newest first.
+    for (const list of agentsByWs.values()) {
+      list.sort((a, b) => agentActivity(b) - agentActivity(a));
     }
 
     const byProject = new Map<string, { projectId: string; projectDisplayName: string; workspaces: WorkspaceEntry[] }>();
@@ -703,21 +715,36 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
       }
     }
 
-    // Sort workspaces inside each project: active (running/needs_input/attention) first, then by branch name.
-    const statusWeight = (s: string) =>
-      s === "running" ? 0 : s === "needs_input" ? 1 : s === "attention" ? 2 : s === "done" ? 3 : 4;
+    // Compute each workspace's "last activity" timestamp (ms since epoch).
+    // Prefer the latest agent activity; fall back to workspace activityAt,
+    // then statusEnteredAt. Returns 0 when nothing is known (sorts last).
+    const workspaceActivity = (ws: WorkspaceEntry): number => {
+      const agents = agentsByWs.get(ws.id) ?? [];
+      let latest = 0;
+      for (const a of agents) {
+        const t = agentActivity(a);
+        if (t > latest) latest = t;
+      }
+      if (latest > 0) return latest;
+      const fallbackIso = ws.activityAt ?? ws.statusEnteredAt;
+      if (fallbackIso) {
+        const t = new Date(fallbackIso).getTime();
+        if (!Number.isNaN(t)) return t;
+      }
+      return 0;
+    };
+
+    // Sort workspaces inside each project by last activity, newest first.
     for (const project of byProject.values()) {
-      project.workspaces.sort((a, b) => {
-        const w = statusWeight(a.status) - statusWeight(b.status);
-        if (w !== 0) return w;
-        return a.name.localeCompare(b.name);
-      });
+      project.workspaces.sort((a, b) => workspaceActivity(b) - workspaceActivity(a));
     }
 
-    // Sort projects by display name.
-    const projects = Array.from(byProject.values()).sort((a, b) =>
-      a.projectDisplayName.localeCompare(b.projectDisplayName),
-    );
+    // Sort projects by their own last activity (max over their workspaces), newest first.
+    const projects = Array.from(byProject.values()).sort((a, b) => {
+      const aMax = a.workspaces.reduce((m, ws) => Math.max(m, workspaceActivity(ws)), 0);
+      const bMax = b.workspaces.reduce((m, ws) => Math.max(m, workspaceActivity(ws)), 0);
+      return bMax - aMax;
+    });
 
     return { projects, agentsByWorkspace: agentsByWs };
   }, [wsResult, agResult]);
