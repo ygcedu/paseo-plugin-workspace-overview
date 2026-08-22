@@ -222,7 +222,7 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
                 style={[tooltipStyles.row, i === tooltip.lines.length - 1 && { marginBottom: 0 }]}
               >
                 <Text style={tooltipStyles.key}>{line.key}</Text>
-                <Text style={tooltipStyles.value} numberOfLines={3}>
+                <Text style={tooltipStyles.value}>
                   {line.value}
                 </Text>
               </View>
