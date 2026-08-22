@@ -4,11 +4,14 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 import {
+  Animated,
+  Easing,
   ScrollView,
   Text,
   TouchableOpacity,
@@ -155,6 +158,51 @@ function StatusDot({ status, theme }: { status: string; theme: PluginSurfaceProp
       : status === "attention" || status === "failed" || status === "error"
         ? theme.colors.statusDanger
         : theme.colors.foregroundMuted;
+
+  const isActive = status === "running" || status === "needs_input" || status === "initializing";
+  const pulse = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (!isActive) {
+      pulse.setValue(1);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 0.25,
+          duration: 700,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 700,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [isActive, pulse]);
+
+  if (isActive) {
+    return (
+      <Animated.View
+        style={{
+          width: 8,
+          height: 8,
+          borderRadius: 4,
+          backgroundColor: color,
+          marginRight: 8,
+          flexShrink: 0,
+          opacity: pulse,
+        }}
+      />
+    );
+  }
+
   return (
     <View
       style={{
@@ -405,25 +453,53 @@ interface ProjectCardProps {
   projectDisplayName: string;
   workspaces: WorkspaceEntry[];
   agentsByWorkspace: Map<string, AgentEntry[]>;
+  /** Branch-level expand state. undefined means "user hasn't toggled; use auto rule". */
   expanded: Record<string, boolean>;
-  onToggleBranch: (workspaceId: string) => void;
+  /** Card-level expand state. Same undefined semantics as expanded. */
+  cardExpanded: Record<string, boolean>;
+  onToggleCard: (projectId: string, currentEffective: boolean) => void;
+  onToggleBranch: (workspaceId: string, currentEffective: boolean) => void;
   theme: PluginSurfaceProps["theme"];
   compact: boolean;
   width: number;
   hostLabel: string;
 }
 
+/** Decide whether an agent should auto-expand its surroundings on first view. */
+function shouldAutoExpandAgent(agent: AgentEntry): boolean {
+  return (
+    agent.status === "running" ||
+    agent.status === "error" ||
+    agent.requiresAttention === true
+  );
+}
+
 function ProjectCard({
+  projectId,
   projectDisplayName,
   workspaces,
   agentsByWorkspace,
   expanded,
+  cardExpanded,
+  onToggleCard,
   onToggleBranch,
   theme,
   compact,
   width,
   hostLabel,
 }: ProjectCardProps) {
+  // Card-level expand: explicit user toggle wins; otherwise auto-expand when
+  // any branch contains a running/errored/attention agent.
+  const cardIsExpanded = useMemo(() => {
+    const explicit = cardExpanded[projectId];
+    if (explicit !== undefined) return explicit;
+    return workspaces.some((ws) => (agentsByWorkspace.get(ws.id) ?? []).some(shouldAutoExpandAgent));
+  }, [cardExpanded, projectId, workspaces, agentsByWorkspace]);
+
+  const toggleCard = useCallback(
+    () => onToggleCard(projectId, cardIsExpanded),
+    [onToggleCard, projectId, cardIsExpanded],
+  );
   const styles = useMemo(
     () =>
       ({
@@ -448,6 +524,12 @@ function ProjectCard({
           backgroundColor: theme.colors.foregroundMuted + "14",
           borderBottomWidth: 1,
           borderBottomColor: theme.colors.foregroundMuted + "26",
+        } as ViewStyle,
+        headerChevron: {
+          width: 16,
+          marginRight: 6,
+          alignItems: "center" as const,
+          justifyContent: "center" as const,
         } as ViewStyle,
         title: {
           color: theme.colors.foreground,
@@ -479,19 +561,28 @@ function ProjectCard({
 
   return (
     <View style={styles.card}>
-      <View style={styles.header}>
-        <Text style={styles.title} numberOfLines={1}>
-          {projectDisplayName}
-        </Text>
-        <Text style={styles.counter}>
-          {workspaces.length} branch{workspaces.length !== 1 ? "es" : ""}
-          {totalAgents > 0 ? ` · ${totalAgents} agent${totalAgents !== 1 ? "s" : ""}` : ""}
-        </Text>
-      </View>
-      <View style={styles.body}>
+      <TouchableOpacity onPress={toggleCard} activeOpacity={0.7}>
+        <View style={styles.header}>
+          <View style={styles.headerChevron}>
+            <ChevronIcon expanded={cardIsExpanded} color={theme.colors.foregroundMuted} size={10} />
+          </View>
+          <Text style={styles.title} numberOfLines={1}>
+            {projectDisplayName}
+          </Text>
+          <Text style={styles.counter}>
+            {workspaces.length} branch{workspaces.length !== 1 ? "es" : ""}
+            {totalAgents > 0 ? ` · ${totalAgents} agent${totalAgents !== 1 ? "s" : ""}` : ""}
+          </Text>
+        </View>
+      </TouchableOpacity>
+      {cardIsExpanded && (
+        <View style={styles.body}>
         {workspaces.map((ws, idx) => {
           const wsAgents = agentsByWorkspace.get(ws.id) ?? [];
-          const isExpanded = expanded[ws.id] ?? false;
+          // If the user hasn't manually toggled this branch yet (undefined),
+          // auto-expand when it contains a running/errored/attention agent.
+          const explicit = expanded[ws.id];
+          const isExpanded = explicit !== undefined ? explicit : wsAgents.some(shouldAutoExpandAgent);
           return (
             <View key={ws.id}>
               {idx > 0 && <View style={styles.divider} />}
@@ -499,7 +590,7 @@ function ProjectCard({
                 workspace={ws}
                 agents={wsAgents}
                 expanded={isExpanded}
-                onToggle={() => onToggleBranch(ws.id)}
+                onToggle={() => onToggleBranch(ws.id, isExpanded)}
                 theme={theme}
                 compact={compact}
                 hostLabel={hostLabel}
@@ -518,7 +609,8 @@ function ProjectCard({
             </View>
           );
         })}
-      </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -527,6 +619,7 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
   const paseo = usePaseo();
   const [containerWidth, setContainerWidth] = useState(0);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [cardExpanded, setCardExpanded] = useState<Record<string, boolean>>({});
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const [surfaceSize, setSurfaceSize] = useState({ width: 0, height: 0 });
   const surfaceRef = useRef<View | null>(null);
@@ -562,8 +655,12 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
     setContainerWidth(e.nativeEvent.layout.width);
   }, []);
 
-  const handleToggleBranch = useCallback((workspaceId: string) => {
-    setExpanded((prev) => ({ ...prev, [workspaceId]: !prev[workspaceId] }));
+  const handleToggleBranch = useCallback((workspaceId: string, currentEffective: boolean) => {
+    setExpanded((prev) => ({ ...prev, [workspaceId]: !currentEffective }));
+  }, []);
+
+  const handleToggleCard = useCallback((projectId: string, currentEffective: boolean) => {
+    setCardExpanded((prev) => ({ ...prev, [projectId]: !currentEffective }));
   }, []);
 
   const { columns, cardWidth } = useMemo(() => {
@@ -759,6 +856,8 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
                     workspaces={project.workspaces}
                     agentsByWorkspace={agentsByWorkspace}
                     expanded={expanded}
+                    cardExpanded={cardExpanded}
+                    onToggleCard={handleToggleCard}
                     onToggleBranch={handleToggleBranch}
                     theme={theme}
                     compact={layout.compact}
