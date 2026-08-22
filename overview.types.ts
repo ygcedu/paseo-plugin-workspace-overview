@@ -17,7 +17,7 @@ export interface WorkspaceEntry {
   statusEnteredAt?: string | null;
   activityAt?: string | null;
   workspaceKind: "directory" | "local_checkout" | "checkout" | "worktree";
-  directory: string;
+  workspaceDirectory: string;
   gitRuntime?: { currentBranch?: string | null } | null;
 }
 

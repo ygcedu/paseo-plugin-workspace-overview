@@ -139,6 +139,7 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
           color: theme.colors.surface0,
           fontSize: 11,
           flex: 1,
+          minWidth: 0,
           fontWeight: "500" as const,
         } as TextStyle,
       }),

@@ -58,7 +58,7 @@ export function BranchRow({
     const lines: Array<{ key: string; value: string }> = [
       { key: "Kind", value: KIND_LABEL[workspace.workspaceKind] ?? workspace.workspaceKind },
       { key: "Branch", value: branchLabel },
-      { key: "Directory", value: workspace.directory },
+      { key: "Directory", value: workspace.workspaceDirectory },
       { key: "Host", value: hostLabel },
       { key: "Status", value: workspace.status },
     ];
