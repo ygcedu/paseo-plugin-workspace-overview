@@ -75,4 +75,5 @@ export interface ProjectCardProps {
   compact: boolean;
   width: number;
   hostLabel: string;
+  hostId: string;
 }

@@ -65,25 +65,6 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
     [],
   );
 
-  if (isLoading) {
-    return (
-      <View style={{ flex: 1, alignItems: "center" as const, justifyContent: "center" as const, backgroundColor: theme.colors.surface0 }}>
-        <Text style={{ color: theme.colors.foregroundMuted }}>Loading…</Text>
-      </View>
-    );
-  }
-
-  if (error) {
-    return (
-      <View style={{ flex: 1, alignItems: "center" as const, justifyContent: "center" as const, backgroundColor: theme.colors.surface0, padding: 24 }}>
-        <Text style={{ color: theme.colors.statusDanger }}>{(error as Error).message}</Text>
-        <TouchableOpacity onPress={() => void refetch()} style={{ marginTop: 12 }}>
-          <Text style={{ color: theme.colors.accent }}>Retry</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
   const totalWorkspaces = projects.reduce((sum, p) => sum + p.workspaces.length, 0);
   const totalAgents = projects.reduce((sum, p) => sum + p.workspaces.reduce((s, ws) => s + (agentsByWorkspace.get(ws.id)?.length ?? 0), 0), 0);
   const horizontalPadding = layout.compact ? 12 : 20;
@@ -152,6 +133,27 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
     [theme],
   );
 
+  // Keep all hooks above loading/error branches so every render calls them in
+  // the same order. Remote hosts make these transitional states more visible.
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, alignItems: "center" as const, justifyContent: "center" as const, backgroundColor: theme.colors.surface0 }}>
+        <Text style={{ color: theme.colors.foregroundMuted }}>Loading…</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={{ flex: 1, alignItems: "center" as const, justifyContent: "center" as const, backgroundColor: theme.colors.surface0, padding: 24 }}>
+        <Text style={{ color: theme.colors.statusDanger }}>{(error as Error).message}</Text>
+        <TouchableOpacity onPress={() => void refetch()} style={{ marginTop: 12 }}>
+          <Text style={{ color: theme.colors.accent }}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <TooltipProvider value={tooltipCtxValue}>
       <View
@@ -208,6 +210,7 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
                     compact={layout.compact}
                     width={cardWidth}
                     hostLabel={host.label}
+                    hostId={host.id}
                   />
                 ))}
               {columns > 1 &&

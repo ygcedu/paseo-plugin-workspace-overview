@@ -1,12 +1,14 @@
 import { type PluginWorkspacePanelProps, usePaseo } from "@getpaseo/plugin";
 import { useQuery } from "@tanstack/react-query";
 import React, { useMemo } from "react";
-import { FlatList, Text, View, type ViewStyle, type TextStyle } from "react-native";
+import { FlatList, Text, TouchableOpacity, View, type ViewStyle, type TextStyle } from "react-native";
+import { useOpenAgent } from "./hooks/useOpenAgent";
 
 function AgentRow({
   agent,
   theme,
   compact,
+  serverId,
 }: {
   agent: {
     id: string;
@@ -20,7 +22,9 @@ function AgentRow({
   };
   theme: PluginWorkspacePanelProps["theme"];
   compact: boolean;
+  serverId: string;
 }) {
+  const { openAgent } = useOpenAgent(serverId);
   const styles = useMemo(
     () =>
       ({
@@ -55,23 +59,25 @@ function AgentRow({
   );
 
   return (
-    <View style={styles.row}>
-      <View style={styles.dot} />
-      <View style={styles.info}>
-        <Text style={styles.title} numberOfLines={1}>
-          {agent.title ?? agent.shortId}
-        </Text>
-        <Text style={styles.meta}>{agent.status}</Text>
-        <Text style={styles.provider}>
-          {agent.provider}
-          {agent.model ? ` · ${agent.model}` : ""}
-        </Text>
+    <TouchableOpacity onPress={() => void openAgent(agent.id)} activeOpacity={0.7}>
+      <View style={styles.row}>
+        <View style={styles.dot} />
+        <View style={styles.info}>
+          <Text style={styles.title} numberOfLines={1}>
+            {agent.title ?? agent.shortId}
+          </Text>
+          <Text style={styles.meta}>{agent.status}</Text>
+          <Text style={styles.provider}>
+            {agent.provider}
+            {agent.model ? ` · ${agent.model}` : ""}
+          </Text>
+        </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
-export function WorkspaceAgentsPanel({ theme, layout, workspaceId }: PluginWorkspacePanelProps) {
+export function WorkspaceAgentsPanel({ theme, layout, workspaceId, host }: PluginWorkspacePanelProps) {
   const paseo = usePaseo();
 
   const { data, isLoading, error } = useQuery({
@@ -126,7 +132,7 @@ export function WorkspaceAgentsPanel({ theme, layout, workspaceId }: PluginWorks
           data={agents.map((entry: { agent: { id: string; shortId: string; title: string | null; provider: string; model: string | null; status: string; requiresAttention: boolean } }) => entry.agent)}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
-            <AgentRow agent={item} theme={theme} compact={layout.compact} />
+            <AgentRow agent={item} theme={theme} compact={layout.compact} serverId={host.id} />
           )}
           contentContainerStyle={{ paddingBottom: 16 }}
         />
