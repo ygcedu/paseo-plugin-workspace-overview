@@ -13,12 +13,40 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
   const [cardExpanded, setCardExpanded] = useState<Record<string, boolean>>({});
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const [surfaceSize, setSurfaceSize] = useState({ width: 0, height: 0 });
+  const [showOnlyToday, setShowOnlyToday] = useState(false);
   const surfaceRef = useRef<View | null>(null);
   const surfaceOrigin = useRef({ x: 0, y: 0 });
 
   const paseo = usePaseo();
 
   const { projects, agentsByWorkspace, isLoading, error, refetch } = useWorkspaces(host.id);
+
+  const isToday = useCallback((iso?: string | null) => {
+    if (!iso) return false;
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return false;
+    const now = new Date();
+    return (
+      d.getFullYear() === now.getFullYear() &&
+      d.getMonth() === now.getMonth() &&
+      d.getDate() === now.getDate()
+    );
+  }, []);
+
+  const filteredProjects = useMemo(() => {
+    if (!showOnlyToday) return projects;
+    return projects
+      .map((project) => {
+        const filteredWorkspaces = project.workspaces.filter(
+          (ws) =>
+            isToday(ws.activityAt) ||
+            isToday(ws.statusEnteredAt) ||
+            (agentsByWorkspace.get(ws.id) ?? []).some((a) => isToday(a.lastUserMessageAt) || isToday(a.updatedAt)),
+        );
+        return { ...project, workspaces: filteredWorkspaces };
+      })
+      .filter((project) => project.workspaces.length > 0);
+  }, [projects, agentsByWorkspace, showOnlyToday, isToday]);
 
   const handleOpenDirectory = useCallback((directory: string) => {
     void paseo.workspaces.open(directory);
@@ -65,8 +93,8 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
     [],
   );
 
-  const totalWorkspaces = projects.reduce((sum, p) => sum + p.workspaces.length, 0);
-  const totalAgents = projects.reduce((sum, p) => sum + p.workspaces.reduce((s, ws) => s + (agentsByWorkspace.get(ws.id)?.length ?? 0), 0), 0);
+  const totalWorkspaces = filteredProjects.reduce((sum, p) => sum + p.workspaces.length, 0);
+  const totalAgents = filteredProjects.reduce((sum, p) => sum + p.workspaces.reduce((s, ws) => s + (agentsByWorkspace.get(ws.id)?.length ?? 0), 0), 0);
   const horizontalPadding = layout.compact ? 12 : 20;
 
   // Tooltip dimensions (approximate; we clamp position so it stays inside the surface).
@@ -162,18 +190,35 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
         onLayout={measureSurface}
       >
         <View style={{ paddingHorizontal: horizontalPadding, paddingTop: 12, paddingBottom: 8 }}>
-          <Text style={{ color: theme.colors.foreground, fontSize: layout.compact ? 18 : 22, fontWeight: "700" as const }}>
-            所有项目
-          </Text>
+          <View style={{ flexDirection: "row" as const, alignItems: "center" as const, justifyContent: "space-between" as const }}>
+            <Text style={{ color: theme.colors.foreground, fontSize: layout.compact ? 18 : 22, fontWeight: "700" as const }}>
+              所有项目
+            </Text>
+            <TouchableOpacity
+              onPress={() => setShowOnlyToday((v) => !v)}
+              style={{
+                flexDirection: "row" as const,
+                alignItems: "center" as const,
+                paddingHorizontal: 8,
+                paddingVertical: 4,
+                borderRadius: 6,
+                backgroundColor: showOnlyToday ? theme.colors.accent + "22" : theme.colors.foregroundMuted + "18",
+              }}
+            >
+              <Text style={{ color: showOnlyToday ? theme.colors.accent : theme.colors.foregroundMuted, fontSize: 11, fontWeight: "600" as const }}>
+                {showOnlyToday ? "今日 · 全部" : "今日"}
+              </Text>
+            </TouchableOpacity>
+          </View>
           <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12, marginTop: 2 }}>
-            {host.label} · {projects.length} 个项目 · {totalWorkspaces} 个分支 · {totalAgents} 个 agent
+            {host.label} · {filteredProjects.length} 个项目 · {totalWorkspaces} 个分支 · {totalAgents} 个 agent
           </Text>
         </View>
 
-        {projects.length === 0 ? (
+        {filteredProjects.length === 0 ? (
           <View style={{ flex: 1, alignItems: "center" as const, justifyContent: "center" as const, padding: 24 }}>
             <Text style={{ color: theme.colors.foregroundMuted, textAlign: "center" as const }}>
-              No projects found.
+              {showOnlyToday ? "今天没有活跃的会话。" : "No projects found."}
             </Text>
           </View>
         ) : (
@@ -194,7 +239,7 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
               }}
             >
               {cardWidth > 0 &&
-                projects.map((project) => (
+                filteredProjects.map((project) => (
                   <ProjectCard
                     key={project.projectId}
                     projectId={project.projectId}
