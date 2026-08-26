@@ -13,7 +13,7 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
   const [cardExpanded, setCardExpanded] = useState<Record<string, boolean>>({});
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const [surfaceSize, setSurfaceSize] = useState({ width: 0, height: 0 });
-  const [showOnlyToday, setShowOnlyToday] = useState(false);
+  const [showOnlyToday, setShowOnlyToday] = useState(true);
   const surfaceRef = useRef<View | null>(null);
   const surfaceOrigin = useRef({ x: 0, y: 0 });
 
@@ -63,6 +63,19 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
   const handleToggleCard = useCallback((projectId: string, currentEffective: boolean) => {
     setCardExpanded((prev) => ({ ...prev, [projectId]: !currentEffective }));
   }, []);
+
+  // When today-only filter is active, auto-expand all cards and branches by default.
+  const cardExpandedToday = useMemo(() => {
+    if (!showOnlyToday) return {};
+    const result: Record<string, boolean> = {};
+    for (const project of filteredProjects) {
+      result[project.projectId] = true;
+      for (const ws of project.workspaces) {
+        result[ws.id] = true;
+      }
+    }
+    return result;
+  }, [showOnlyToday, filteredProjects]);
 
   const { columns, cardWidth } = useMemo(() => {
     if (containerWidth <= 0) return { columns: 1, cardWidth: 0 };
@@ -238,7 +251,7 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
                 alignItems: "flex-start" as const,
               }}
             >
-              {cardWidth > 0 &&
+              {columns > 0 && cardWidth > 0 &&
                 filteredProjects.map((project) => (
                   <ProjectCard
                     key={project.projectId}
@@ -246,8 +259,8 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
                     projectDisplayName={project.projectDisplayName}
                     workspaces={project.workspaces}
                     agentsByWorkspace={agentsByWorkspace}
-                    expanded={expanded}
-                    cardExpanded={cardExpanded}
+                    expanded={{ ...cardExpandedToday, ...expanded }}
+                    cardExpanded={{ ...cardExpandedToday, ...cardExpanded }}
                     onToggleCard={handleToggleCard}
                     onToggleBranch={handleToggleBranch}
                     onOpenDirectory={handleOpenDirectory}
