@@ -34,13 +34,13 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
     for (const project of projects) {
       const filteredWorkspaces = project.workspaces
         .map((ws) => {
-          const hasWsActivity =
-            isRecent24h(ws.activityAt) ||
-            isRecent24h(ws.statusEnteredAt);
+          // Only keep the workspace if at least one agent has a user message in the last 24h.
+          // Do NOT fall back to ws.activityAt / ws.statusEnteredAt — those are workspace
+          // metadata timestamps (creation, status change), not actual user activity.
           const wsAgents = (agentsByWorkspace.get(ws.id) ?? []).filter(
-            (a) => isRecent24h(a.lastUserMessageAt) || isRecent24h(a.updatedAt),
+            (a) => isRecent24h(a.lastUserMessageAt),
           );
-          if (!hasWsActivity && wsAgents.length === 0) return null;
+          if (wsAgents.length === 0) return null;
           return ws;
         })
         .filter((ws): ws is WorkspaceEntry => ws !== null);
@@ -57,7 +57,7 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
     for (const project of filteredProjects) {
       for (const ws of project.workspaces) {
         const agents = (agentsByWorkspace.get(ws.id) ?? []).filter(
-          (a) => isRecent24h(a.lastUserMessageAt) || isRecent24h(a.updatedAt),
+          (a) => isRecent24h(a.lastUserMessageAt),
         );
         if (agents.length > 0) map.set(ws.id, agents);
       }
