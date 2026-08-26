@@ -236,7 +236,7 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
               }}
             >
               <Text style={{ color: showOnlyToday ? theme.colors.accent : theme.colors.foregroundMuted, fontSize: 11, fontWeight: "600" as const }}>
-                {showOnlyToday ? "24h · 全部" : "最近24h"}
+                {showOnlyToday ? "近24小时" : "全部"}
               </Text>
             </TouchableOpacity>
           </View>
