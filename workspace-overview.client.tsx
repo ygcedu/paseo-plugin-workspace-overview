@@ -21,32 +21,49 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
 
   const { projects, agentsByWorkspace, isLoading, error, refetch } = useWorkspaces(host.id);
 
-  const isToday = useCallback((iso?: string | null) => {
+  const isRecent24h = useCallback((iso?: string | null) => {
     if (!iso) return false;
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return false;
-    const now = new Date();
-    return (
-      d.getFullYear() === now.getFullYear() &&
-      d.getMonth() === now.getMonth() &&
-      d.getDate() === now.getDate()
-    );
+    const t = new Date(iso).getTime();
+    if (Number.isNaN(t)) return false;
+    return Date.now() - t < 24 * 60 * 60 * 1000;
   }, []);
 
   const filteredProjects = useMemo(() => {
     if (!showOnlyToday) return projects;
-    return projects
-      .map((project) => {
-        const filteredWorkspaces = project.workspaces.filter(
-          (ws) =>
-            isToday(ws.activityAt) ||
-            isToday(ws.statusEnteredAt) ||
-            (agentsByWorkspace.get(ws.id) ?? []).some((a) => isToday(a.lastUserMessageAt) || isToday(a.updatedAt)),
+    const result: Array<{ projectId: string; projectDisplayName: string; workspaces: WorkspaceEntry[] }> = [];
+    for (const project of projects) {
+      const filteredWorkspaces = project.workspaces
+        .map((ws) => {
+          const hasWsActivity =
+            isRecent24h(ws.activityAt) ||
+            isRecent24h(ws.statusEnteredAt);
+          const wsAgents = (agentsByWorkspace.get(ws.id) ?? []).filter(
+            (a) => isRecent24h(a.lastUserMessageAt) || isRecent24h(a.updatedAt),
+          );
+          if (!hasWsActivity && wsAgents.length === 0) return null;
+          return ws;
+        })
+        .filter((ws): ws is WorkspaceEntry => ws !== null);
+      if (filteredWorkspaces.length > 0) {
+        result.push({ ...project, workspaces: filteredWorkspaces });
+      }
+    }
+    return result;
+  }, [projects, agentsByWorkspace, showOnlyToday, isRecent24h]);
+
+  const filteredAgentsByWorkspace = useMemo(() => {
+    if (!showOnlyToday) return agentsByWorkspace;
+    const map = new Map<string, AgentEntry[]>();
+    for (const project of filteredProjects) {
+      for (const ws of project.workspaces) {
+        const agents = (agentsByWorkspace.get(ws.id) ?? []).filter(
+          (a) => isRecent24h(a.lastUserMessageAt) || isRecent24h(a.updatedAt),
         );
-        return { ...project, workspaces: filteredWorkspaces };
-      })
-      .filter((project) => project.workspaces.length > 0);
-  }, [projects, agentsByWorkspace, showOnlyToday, isToday]);
+        if (agents.length > 0) map.set(ws.id, agents);
+      }
+    }
+    return map;
+  }, [showOnlyToday, filteredProjects, agentsByWorkspace, isRecent24h]);
 
   const handleOpenDirectory = useCallback((directory: string) => {
     void paseo.workspaces.open(directory);
@@ -107,7 +124,7 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
   );
 
   const totalWorkspaces = filteredProjects.reduce((sum, p) => sum + p.workspaces.length, 0);
-  const totalAgents = filteredProjects.reduce((sum, p) => sum + p.workspaces.reduce((s, ws) => s + (agentsByWorkspace.get(ws.id)?.length ?? 0), 0), 0);
+  const totalAgents = filteredProjects.reduce((sum, p) => sum + p.workspaces.reduce((s, ws) => s + (filteredAgentsByWorkspace.get(ws.id)?.length ?? 0), 0), 0);
   const horizontalPadding = layout.compact ? 12 : 20;
 
   // Tooltip dimensions (approximate; we clamp position so it stays inside the surface).
@@ -219,7 +236,7 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
               }}
             >
               <Text style={{ color: showOnlyToday ? theme.colors.accent : theme.colors.foregroundMuted, fontSize: 11, fontWeight: "600" as const }}>
-                {showOnlyToday ? "今日 · 全部" : "今日"}
+                {showOnlyToday ? "24h · 全部" : "最近24h"}
               </Text>
             </TouchableOpacity>
           </View>
@@ -231,7 +248,7 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
         {filteredProjects.length === 0 ? (
           <View style={{ flex: 1, alignItems: "center" as const, justifyContent: "center" as const, padding: 24 }}>
             <Text style={{ color: theme.colors.foregroundMuted, textAlign: "center" as const }}>
-              {showOnlyToday ? "今天没有活跃的会话。" : "No projects found."}
+              {showOnlyToday ? "最近24小时没有活跃会话。" : "No projects found."}
             </Text>
           </View>
         ) : (
@@ -258,7 +275,7 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
                     projectId={project.projectId}
                     projectDisplayName={project.projectDisplayName}
                     workspaces={project.workspaces}
-                    agentsByWorkspace={agentsByWorkspace}
+                    agentsByWorkspace={filteredAgentsByWorkspace}
                     expanded={{ ...cardExpandedToday, ...expanded }}
                     cardExpanded={{ ...cardExpandedToday, ...cardExpanded }}
                     onToggleCard={handleToggleCard}
