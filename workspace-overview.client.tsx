@@ -5,6 +5,7 @@ import { ScrollView, Text, TouchableOpacity, View, type LayoutChangeEvent, type 
 import { TooltipProvider, useTooltip } from "./components/Tooltip";
 import { ProjectCard } from "./components/ProjectCard";
 import { useWorkspaces } from "./hooks/useWorkspaces";
+import { useFilter, TIME_RANGES, type TimeRange } from "./hooks/useFilter";
 import { type TooltipState } from "./overview.types";
 
 export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
@@ -13,57 +14,18 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
   const [cardExpanded, setCardExpanded] = useState<Record<string, boolean>>({});
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const [surfaceSize, setSurfaceSize] = useState({ width: 0, height: 0 });
-  const [showOnlyToday, setShowOnlyToday] = useState(true);
+  const [timeRange, setTimeRange] = useState<TimeRange>("24h");
   const surfaceRef = useRef<View | null>(null);
   const surfaceOrigin = useRef({ x: 0, y: 0 });
 
   const paseo = usePaseo();
-
   const { projects, agentsByWorkspace, isLoading, error, refetch } = useWorkspaces(host.id);
 
-  const isRecent24h = useCallback((iso?: string | null) => {
-    if (!iso) return false;
-    const t = new Date(iso).getTime();
-    if (Number.isNaN(t)) return false;
-    return Date.now() - t < 24 * 60 * 60 * 1000;
-  }, []);
-
-  const filteredProjects = useMemo(() => {
-    if (!showOnlyToday) return projects;
-    const result: Array<{ projectId: string; projectDisplayName: string; workspaces: WorkspaceEntry[] }> = [];
-    for (const project of projects) {
-      const filteredWorkspaces = project.workspaces
-        .map((ws) => {
-          // Only keep the workspace if at least one agent has a user message in the last 24h.
-          // Do NOT fall back to ws.activityAt / ws.statusEnteredAt — those are workspace
-          // metadata timestamps (creation, status change), not actual user activity.
-          const wsAgents = (agentsByWorkspace.get(ws.id) ?? []).filter(
-            (a) => isRecent24h(a.lastUserMessageAt),
-          );
-          if (wsAgents.length === 0) return null;
-          return ws;
-        })
-        .filter((ws): ws is WorkspaceEntry => ws !== null);
-      if (filteredWorkspaces.length > 0) {
-        result.push({ ...project, workspaces: filteredWorkspaces });
-      }
-    }
-    return result;
-  }, [projects, agentsByWorkspace, showOnlyToday, isRecent24h]);
-
-  const filteredAgentsByWorkspace = useMemo(() => {
-    if (!showOnlyToday) return agentsByWorkspace;
-    const map = new Map<string, AgentEntry[]>();
-    for (const project of filteredProjects) {
-      for (const ws of project.workspaces) {
-        const agents = (agentsByWorkspace.get(ws.id) ?? []).filter(
-          (a) => isRecent24h(a.lastUserMessageAt),
-        );
-        if (agents.length > 0) map.set(ws.id, agents);
-      }
-    }
-    return map;
-  }, [showOnlyToday, filteredProjects, agentsByWorkspace, isRecent24h]);
+  const { filteredProjects, filteredAgentsByWorkspace, autoExpand } = useFilter(
+    projects,
+    agentsByWorkspace,
+    timeRange,
+  );
 
   const handleOpenDirectory = useCallback((directory: string) => {
     void paseo.workspaces.open(directory);
@@ -80,19 +42,6 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
   const handleToggleCard = useCallback((projectId: string, currentEffective: boolean) => {
     setCardExpanded((prev) => ({ ...prev, [projectId]: !currentEffective }));
   }, []);
-
-  // When today-only filter is active, auto-expand all cards and branches by default.
-  const cardExpandedToday = useMemo(() => {
-    if (!showOnlyToday) return {};
-    const result: Record<string, boolean> = {};
-    for (const project of filteredProjects) {
-      result[project.projectId] = true;
-      for (const ws of project.workspaces) {
-        result[ws.id] = true;
-      }
-    }
-    return result;
-  }, [showOnlyToday, filteredProjects]);
 
   const { columns, cardWidth } = useMemo(() => {
     if (containerWidth <= 0) return { columns: 1, cardWidth: 0 };
@@ -124,28 +73,24 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
   );
 
   const totalWorkspaces = filteredProjects.reduce((sum, p) => sum + p.workspaces.length, 0);
-  const totalAgents = filteredProjects.reduce((sum, p) => sum + p.workspaces.reduce((s, ws) => s + (filteredAgentsByWorkspace.get(ws.id)?.length ?? 0), 0), 0);
+  const totalAgents = filteredProjects.reduce((sum, p) =>
+    sum + p.workspaces.reduce((s, ws) => s + (filteredAgentsByWorkspace.get(ws.id)?.length ?? 0), 0),
+  0);
   const horizontalPadding = layout.compact ? 12 : 20;
 
-  // Tooltip dimensions (approximate; we clamp position so it stays inside the surface).
   const TOOLTIP_WIDTH = 280;
   const TOOLTIP_EST_HEIGHT = tooltip ? 24 + tooltip.lines.length * 18 : 0;
 
   const tooltipPos = useMemo(() => {
     if (!tooltip) return null;
-    // measureInWindow returns window coords; convert to surface-local coords.
     const localX = tooltip.x - surfaceOrigin.current.x;
     const localY = tooltip.y - surfaceOrigin.current.y;
-    let left = localX - TOOLTIP_WIDTH; // right-align with badge
+    let left = localX - TOOLTIP_WIDTH;
     let top = localY + 6;
-    // Clamp horizontally inside the surface.
     if (surfaceSize.width > 0) {
-      if (left + TOOLTIP_WIDTH > surfaceSize.width - 8) {
-        left = surfaceSize.width - TOOLTIP_WIDTH - 8;
-      }
+      if (left + TOOLTIP_WIDTH > surfaceSize.width - 8) left = surfaceSize.width - TOOLTIP_WIDTH - 8;
       if (left < 8) left = 8;
     }
-    // Flip above the badge if there's not enough room below.
     if (surfaceSize.height > 0 && top + TOOLTIP_EST_HEIGHT > surfaceSize.height - 8) {
       top = Math.max(8, localY - TOOLTIP_EST_HEIGHT - 6);
     }
@@ -153,46 +98,28 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
   }, [tooltip, surfaceSize, TOOLTIP_EST_HEIGHT]);
 
   const tooltipStyles = useMemo(
-    () =>
-      ({
-        container: {
-          position: "absolute" as const,
-          width: TOOLTIP_WIDTH,
-          paddingHorizontal: 12,
-          paddingVertical: 10,
-          borderRadius: 8,
-          backgroundColor: theme.colors.foreground,
-          shadowColor: "#000",
-          shadowOpacity: 0.25,
-          shadowRadius: 12,
-          shadowOffset: { width: 0, height: 6 },
-          elevation: 12,
-          zIndex: 9999,
-        } as ViewStyle,
-        row: {
-          flexDirection: "row" as const,
-          marginBottom: 4,
-        } as ViewStyle,
-        key: {
-          color: theme.colors.surface0,
-          opacity: 0.6,
-          fontSize: 11,
-          width: 72,
-          flexShrink: 0,
-        } as TextStyle,
-        value: {
-          color: theme.colors.surface0,
-          fontSize: 11,
-          flex: 1,
-          minWidth: 0,
-          fontWeight: "500" as const,
-        } as TextStyle,
-      }),
+    () => ({
+      container: {
+        position: "absolute" as const,
+        width: TOOLTIP_WIDTH,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderRadius: 8,
+        backgroundColor: theme.colors.foreground,
+        shadowColor: "#000",
+        shadowOpacity: 0.25,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 6 },
+        elevation: 12,
+        zIndex: 9999,
+      } as ViewStyle,
+      row: { flexDirection: "row" as const, marginBottom: 4 } as ViewStyle,
+      key: { color: theme.colors.surface0, opacity: 0.6, fontSize: 11, width: 72, flexShrink: 0 } as TextStyle,
+      value: { color: theme.colors.surface0, fontSize: 11, flex: 1, minWidth: 0, fontWeight: "500" as const } as TextStyle,
+    }),
     [theme],
   );
 
-  // Keep all hooks above loading/error branches so every render calls them in
-  // the same order. Remote hosts make these transitional states more visible.
   if (isLoading) {
     return (
       <View style={{ flex: 1, alignItems: "center" as const, justifyContent: "center" as const, backgroundColor: theme.colors.surface0 }}>
@@ -224,21 +151,40 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
             <Text style={{ color: theme.colors.foreground, fontSize: layout.compact ? 18 : 22, fontWeight: "700" as const }}>
               所有项目
             </Text>
-            <TouchableOpacity
-              onPress={() => setShowOnlyToday((v) => !v)}
+            <View
               style={{
                 flexDirection: "row" as const,
-                alignItems: "center" as const,
-                paddingHorizontal: 8,
-                paddingVertical: 4,
                 borderRadius: 6,
-                backgroundColor: showOnlyToday ? theme.colors.accent + "22" : theme.colors.foregroundMuted + "18",
+                overflow: "hidden" as const,
+                borderWidth: 1,
+                borderColor: theme.colors.foregroundMuted + "22",
               }}
             >
-              <Text style={{ color: showOnlyToday ? theme.colors.accent : theme.colors.foregroundMuted, fontSize: 11, fontWeight: "600" as const }}>
-                {showOnlyToday ? "近24小时" : "全部"}
-              </Text>
-            </TouchableOpacity>
+              {TIME_RANGES.map((r) => {
+                const active = timeRange === r.key;
+                return (
+                  <TouchableOpacity
+                    key={r.key}
+                    onPress={() => setTimeRange(r.key)}
+                    style={{
+                      paddingHorizontal: 7,
+                      paddingVertical: 3,
+                      backgroundColor: active ? theme.colors.accent + "22" : "transparent",
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: active ? theme.colors.accent : theme.colors.foregroundMuted,
+                        fontSize: 11,
+                        fontWeight: active ? "600" as const : "400" as const,
+                      }}
+                    >
+                      {r.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
           <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12, marginTop: 2 }}>
             {host.label} · {filteredProjects.length} 个项目 · {totalWorkspaces} 个分支 · {totalAgents} 个 agent
@@ -248,16 +194,12 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
         {filteredProjects.length === 0 ? (
           <View style={{ flex: 1, alignItems: "center" as const, justifyContent: "center" as const, padding: 24 }}>
             <Text style={{ color: theme.colors.foregroundMuted, textAlign: "center" as const }}>
-              {showOnlyToday ? "最近24小时没有活跃会话。" : "No projects found."}
+              {timeRange === "all" ? "No projects found." : "没有活跃会话。"}
             </Text>
           </View>
         ) : (
           <ScrollView
-            contentContainerStyle={{
-              paddingHorizontal: horizontalPadding,
-              paddingBottom: 24,
-              paddingTop: 4,
-            }}
+            contentContainerStyle={{ paddingHorizontal: horizontalPadding, paddingBottom: 24, paddingTop: 4 }}
           >
             <View
               onLayout={handleContainerLayout}
@@ -276,8 +218,8 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
                     projectDisplayName={project.projectDisplayName}
                     workspaces={project.workspaces}
                     agentsByWorkspace={filteredAgentsByWorkspace}
-                    expanded={{ ...cardExpandedToday, ...expanded }}
-                    cardExpanded={{ ...cardExpandedToday, ...cardExpanded }}
+                    expanded={{ ...autoExpand, ...expanded }}
+                    cardExpanded={{ ...autoExpand, ...cardExpanded }}
                     onToggleCard={handleToggleCard}
                     onToggleBranch={handleToggleBranch}
                     onOpenDirectory={handleOpenDirectory}
@@ -297,19 +239,11 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
         )}
 
         {tooltip && tooltipPos && (
-          <View
-            style={[tooltipStyles.container, { left: tooltipPos.left, top: tooltipPos.top }]}
-            pointerEvents="none"
-          >
+          <View style={[tooltipStyles.container, { left: tooltipPos.left, top: tooltipPos.top }]} pointerEvents="none">
             {tooltip.lines.map((line, i) => (
-              <View
-                key={i}
-                style={[tooltipStyles.row, i === tooltip.lines.length - 1 && { marginBottom: 0 }]}
-              >
+              <View key={i} style={[tooltipStyles.row, i === tooltip.lines.length - 1 && { marginBottom: 0 }]}>
                 <Text style={tooltipStyles.key}>{line.key}</Text>
-                <Text style={tooltipStyles.value}>
-                  {line.value}
-                </Text>
+                <Text style={tooltipStyles.value}>{line.value}</Text>
               </View>
             ))}
           </View>
