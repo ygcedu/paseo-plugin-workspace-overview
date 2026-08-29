@@ -32,6 +32,7 @@ export function ProjectCard({
   width,
   hostLabel,
   hostId,
+  onCreateWorktree,
 }: ProjectCardProps) {
   // Card-level expand: explicit user toggle wins; otherwise auto-expand when
   // any branch contains a running/errored/attention agent.
@@ -96,6 +97,23 @@ export function ProjectCard({
           fontSize: 11,
           marginLeft: 8,
         } as TextStyle,
+        createBtn: {
+          width: 26,
+          height: 26,
+          borderRadius: 13,
+          alignItems: "center" as const,
+          justifyContent: "center" as const,
+          marginLeft: 8,
+          borderWidth: 1,
+          borderColor: theme.colors.foregroundMuted + "44",
+          backgroundColor: theme.colors.foregroundMuted + "11",
+        } as ViewStyle,
+        createBtnText: {
+          color: theme.colors.foregroundMuted,
+          fontSize: 18,
+          lineHeight: 20,
+          fontWeight: "300" as const,
+        } as TextStyle,
         body: {
           paddingVertical: 0,
         } as ViewStyle,
@@ -127,6 +145,18 @@ export function ProjectCard({
             {workspaces.length} branch{workspaces.length !== 1 ? "es" : ""}
             {totalAgents > 0 ? ` · ${totalAgents} agent${totalAgents !== 1 ? "s" : ""}` : ""}
           </Text>
+          {onCreateWorktree ? (
+            <TouchableOpacity
+              style={styles.createBtn}
+              onPress={(event) => {
+                event.stopPropagation();
+                onCreateWorktree();
+              }}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Text style={styles.createBtnText}>+</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </TouchableOpacity>
       {cardIsExpanded && (

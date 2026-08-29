@@ -4,9 +4,27 @@ import { ScrollView, Text, TouchableOpacity, View, type LayoutChangeEvent, type 
 
 import { TooltipProvider, useTooltip } from "./components/Tooltip";
 import { ProjectCard } from "./components/ProjectCard";
+import { WorkspaceCreateDialog } from "./components/WorkspaceCreateDialog";
 import { useWorkspaces } from "./hooks/useWorkspaces";
 import { useFilter, TIME_RANGES, type TimeRange } from "./hooks/useFilter";
-import { type TooltipState } from "./overview.types";
+import { type TooltipState, type WorkspaceEntry } from "./overview.types";
+
+function resolveProjectSourceDirectory(workspaces: WorkspaceEntry[]): string | undefined {
+  return (
+    workspaces.find((workspace) => workspace.workspaceKind !== "worktree")?.workspaceDirectory ??
+    workspaces[0]?.workspaceDirectory
+  );
+}
+
+function resolveProjectBranches(workspaces: WorkspaceEntry[]): string[] {
+  const branches = new Set<string>();
+  branches.add("main");
+  for (const workspace of workspaces) {
+    const branch = workspace.gitRuntime?.currentBranch?.trim();
+    if (branch) branches.add(branch);
+  }
+  return Array.from(branches);
+}
 
 export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
   const [containerWidth, setContainerWidth] = useState(0);
@@ -15,6 +33,11 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const [surfaceSize, setSurfaceSize] = useState({ width: 0, height: 0 });
   const [timeRange, setTimeRange] = useState<TimeRange>("24h");
+  const [createDialog, setCreateDialog] = useState<{
+    projectId: string;
+    projectDisplayName: string;
+    projectDirectory: string;
+  } | null>(null);
   const surfaceRef = useRef<View | null>(null);
   const surfaceOrigin = useRef({ x: 0, y: 0 });
 
@@ -27,9 +50,33 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
     timeRange,
   );
 
+  const createProjectOptions = useMemo(
+    () =>
+      projects
+        .map((project) => {
+          const projectDirectory = resolveProjectSourceDirectory(project.workspaces);
+          if (!projectDirectory) return null;
+          return {
+            projectId: project.projectId,
+            projectDisplayName: project.projectDisplayName,
+            projectDirectory,
+            branches: resolveProjectBranches(project.workspaces),
+          };
+        })
+        .filter((project): project is NonNullable<typeof project> => project !== null),
+    [projects],
+  );
+
   const handleOpenDirectory = useCallback((directory: string) => {
     void paseo.workspaces.open(directory);
   }, [paseo]);
+
+  const handleCreateWorktree = useCallback(
+    (projectId: string, projectDisplayName: string, projectDirectory: string) => {
+      setCreateDialog({ projectId, projectDisplayName, projectDirectory });
+    },
+    [],
+  );
 
   const handleContainerLayout = useCallback((e: LayoutChangeEvent) => {
     setContainerWidth(e.nativeEvent.layout.width);
@@ -211,25 +258,38 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
               }}
             >
               {columns > 0 && cardWidth > 0 &&
-                filteredProjects.map((project) => (
-                  <ProjectCard
-                    key={project.projectId}
-                    projectId={project.projectId}
-                    projectDisplayName={project.projectDisplayName}
-                    workspaces={project.workspaces}
-                    agentsByWorkspace={filteredAgentsByWorkspace}
-                    expanded={{ ...autoExpand, ...expanded }}
-                    cardExpanded={{ ...autoExpand, ...cardExpanded }}
-                    onToggleCard={handleToggleCard}
-                    onToggleBranch={handleToggleBranch}
-                    onOpenDirectory={handleOpenDirectory}
-                    theme={theme}
-                    compact={layout.compact}
-                    width={cardWidth}
-                    hostLabel={host.label}
-                    hostId={host.id}
-                  />
-                ))}
+                filteredProjects.map((project) => {
+                  const projectDirectory = resolveProjectSourceDirectory(project.workspaces);
+                  return (
+                    <ProjectCard
+                      key={project.projectId}
+                      projectId={project.projectId}
+                      projectDisplayName={project.projectDisplayName}
+                      workspaces={project.workspaces}
+                      agentsByWorkspace={filteredAgentsByWorkspace}
+                      expanded={{ ...autoExpand, ...expanded }}
+                      cardExpanded={{ ...autoExpand, ...cardExpanded }}
+                      onToggleCard={handleToggleCard}
+                      onToggleBranch={handleToggleBranch}
+                      onOpenDirectory={handleOpenDirectory}
+                      theme={theme}
+                      compact={layout.compact}
+                      width={cardWidth}
+                      hostLabel={host.label}
+                      hostId={host.id}
+                      onCreateWorktree={
+                        projectDirectory
+                          ? () =>
+                              handleCreateWorktree(
+                                project.projectId,
+                                project.projectDisplayName,
+                                projectDirectory,
+                              )
+                          : undefined
+                      }
+                    />
+                  );
+                })}
               {columns > 1 &&
                 Array.from({ length: columns - 1 }).map((_, i) => (
                   <View key={`spacer-${i}`} style={{ width: cardWidth }} />
@@ -247,6 +307,19 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
               </View>
             ))}
           </View>
+        )}
+
+        {createDialog && (
+          <WorkspaceCreateDialog
+            projectId={createDialog.projectId}
+            projectDisplayName={createDialog.projectDisplayName}
+            projectDirectory={createDialog.projectDirectory}
+            projects={createProjectOptions}
+            paseo={paseo}
+            onClose={() => setCreateDialog(null)}
+            onCreate={() => void refetch()}
+            theme={theme}
+          />
         )}
       </View>
     </TooltipProvider>

@@ -76,4 +76,5 @@ export interface ProjectCardProps {
   width: number;
   hostLabel: string;
   hostId: string;
+  onCreateWorktree?: () => void;
 }
