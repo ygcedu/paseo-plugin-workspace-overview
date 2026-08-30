@@ -9,6 +9,7 @@ import { openAgentRpc } from "../shared/open-agent";
 export function useOpenAgent(serverId: string) {
   const invoke = useRpc(openAgentRpc);
 
+  // HACK: Replace this daemon RPC + OS deep-link bridge when the plugin SDK exposes native agent navigation.
   const openAgent = useCallback(
     (agentId: string) =>
       invoke({ agentId, serverId }).catch((err) => {
