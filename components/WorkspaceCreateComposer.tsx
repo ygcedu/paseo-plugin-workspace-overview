@@ -9,6 +9,7 @@ import { Menu } from "./WorkspaceMenu";
 import { SelectControl } from "./WorkspaceSelectControl";
 import { defaultModel, formatControlValue, providerById, readyProviders, selectableModels, type ComposerSelection, type Isolation, type MenuOption, type OpenMenu, type ProviderSnapshot, type WorkspaceProjectOption } from "./workspace-creator-shared";
 import { createComposerStyles } from "./workspace-creator-styles";
+import { ProjectIcon } from "./ProjectIcon";
 
 export function WorkspaceCreateComposer({
   project,
@@ -92,6 +93,7 @@ export function WorkspaceCreateComposer({
   const providers = readyProviders(snapshot ?? { entries: [] });
   const models = selectableModels(provider);
   const modes = provider?.modes ?? [];
+  const selectedMode = modes.find((item) => item.id === selection?.modeId) ?? null;
   const model = models.find((item) => item.id === selection?.modelId) ?? defaultModel(provider);
   const thinkingOptions = model?.thinkingOptions ?? [];
 
@@ -110,27 +112,36 @@ export function WorkspaceCreateComposer({
   const modeOptions = modes.map((item) => ({
     id: item.id,
     label: item.label ?? item.id,
+    detail: item.description,
+    iconName: item.icon,
   }));
   const thinkingOptionsForMenu = thinkingOptions.map((item) => ({
     id: item.id,
     label: item.label ?? item.id,
+    iconName: "Brain",
   }));
 
   const projectOptions = projects.map((item) => ({
     id: item.projectId,
     label: item.projectDisplayName,
     detail: item.projectDirectory,
+    projectIconDataUri: item.projectIconDataUri ?? null,
   }));
   const isolationOptions: MenuOption[] = [
-    { id: "worktree", label: "新建 worktree", detail: "创建隔离分支 workspace" },
-    { id: "local", label: "Local", detail: "在项目目录中创建 workspace" },
+    { id: "worktree", label: "新建 worktree", detail: "创建隔离分支 workspace", iconName: "GitBranch" },
+    { id: "local", label: "Local", detail: "在项目目录中创建 workspace", iconName: "Folder" },
   ];
-  const baseOptions = (project?.branches.length ? project.branches : ["main"]).map((branch) => ({
-    id: branch,
-    label: branch,
+  const baseOptions = (project?.branches.length
+    ? project.branches
+    : [{ id: "main", label: "main", detail: "本地分支" }]
+  ).map((branch) => ({
+    id: branch.id,
+    label: branch.label,
+    detail: branch.detail,
+    iconName: "GitBranch",
   }));
-  const launchOptions: MenuOption[] = [{ id: "chat", label: "Chat", detail: "Create a chat workspace" }];
-  const hostOptions: MenuOption[] = [{ id: "current", label: hostLabel }];
+  const launchOptions: MenuOption[] = [{ id: "chat", label: "Chat", detail: "Create a chat workspace", iconName: "MessageCircle" }];
+  const hostOptions: MenuOption[] = [{ id: "current", label: hostLabel, iconName: "Server" }];
   const topMenuOpen = openMenu === "project" || openMenu === "host" || openMenu === "isolation" || openMenu === "base" || openMenu === "launch";
   const composerMenuOpen =
     openMenu === "provider" || openMenu === "model" || openMenu === "mode" || openMenu === "thinking";
@@ -151,7 +162,7 @@ export function WorkspaceCreateComposer({
         <View style={[styles.formStackDesktop, topMenuOpen && styles.menuRegionActive]}>
           <View nativeID="workspace-create-dropdown-project" style={[styles.controlAnchor, openMenu === "project" && styles.controlAnchorOpen]}>
             <Badge
-              icon={<Icon name="Folder" color={theme.colors.foregroundMuted} size={16} />}
+              icon={<ProjectIcon dataUri={project.projectIconDataUri} label={project.projectDisplayName} size={16} theme={theme} />}
               label={project.projectDisplayName}
               selectable={projects.length > 1}
               disabled={pending}
@@ -242,7 +253,7 @@ export function WorkspaceCreateComposer({
               ) : null}
               {modeOptions.length > 0 ? (
                 <View nativeID="workspace-create-dropdown-mode" style={[styles.controlAnchor, openMenu === "mode" && styles.controlAnchorOpen]}>
-                  <SelectControl kind="mode" iconName={selection?.modeId === "full-access" ? "ShieldOff" : selection?.modeId === "auto-review" ? "ShieldCheck" : "Shield"} value={formatControlValue(selection?.modeLabel ?? null, "Mode")} disabled={pending || providerLoading || modeOptions.length <= 1} open={openMenu === "mode"} onPress={() => onToggleMenu(openMenu === "mode" ? null : "mode")} theme={theme} />
+                  <SelectControl kind="mode" iconName={selectedMode?.icon ?? "Bot"} value={formatControlValue(selection?.modeLabel ?? null, "Mode")} disabled={pending || providerLoading || modeOptions.length <= 1} open={openMenu === "mode"} onPress={() => onToggleMenu(openMenu === "mode" ? null : "mode")} theme={theme} />
                   {openMenu === "mode" ? <Menu kind="mode" options={modeOptions} selectedId={selection?.modeId ?? null} onSelect={onSelectMode} theme={theme} /> : null}
                 </View>
               ) : null}

@@ -4,6 +4,7 @@ import type { PluginSurfaceProps } from "@getpaseo/plugin";
 import { Icon } from "@getpaseo/plugin/react-native";
 import { MAX_MENU_HEIGHT, MENU_WIDTH_BY_KIND, opaqueSurfaceColor, type MenuOption, type OpenMenu } from "./workspace-creator-shared";
 import { createMenuStyles } from "./workspace-creator-styles";
+import { ProjectIcon } from "./ProjectIcon";
 
 export function Menu({
   kind,
@@ -52,6 +53,15 @@ export function Menu({
               onPress={() => onSelect(option.id)}
               style={[styles.menuItem, selected && styles.menuItemSelected]}
             >
+              {option.projectIconDataUri !== undefined ? (
+                <View style={styles.menuIconBox}>
+                  <ProjectIcon dataUri={option.projectIconDataUri} label={option.label} theme={theme} />
+                </View>
+              ) : option.iconName ? (
+                <View style={styles.menuIconBox}>
+                  <Icon name={option.iconName} color={theme.colors.foreground} size={16} />
+                </View>
+              ) : null}
               <View style={styles.menuTextGroup}>
                 <Text style={styles.menuLabel} numberOfLines={1}>
                   {option.label}

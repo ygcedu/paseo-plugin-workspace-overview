@@ -26,7 +26,6 @@ export function createComposerStyles(theme: PluginSurfaceProps["theme"]) {
       alignItems: "center",
       justifyContent: "space-between",
       marginBottom: 28,
-      paddingLeft: 8,
     } as ViewStyle,
     headerText: {
       flex: 1,
@@ -45,8 +44,6 @@ export function createComposerStyles(theme: PluginSurfaceProps["theme"]) {
       flexDirection: "row",
       alignItems: "center",
       marginBottom: 32,
-      paddingLeft: 16,
-      paddingRight: 16,
       gap: 8,
     } as ViewStyle,
     controlAnchor: {
@@ -171,7 +168,6 @@ export function createBadgeStyles(theme: PluginSurfaceProps["theme"]) {
       height: 28,
       maxWidth: 240,
       overflow: "hidden",
-      paddingHorizontal: 8,
       borderRadius: 16,
       gap: 4,
     } as ViewStyle,
@@ -269,6 +265,23 @@ export function createMenuStyles(theme: PluginSurfaceProps["theme"]) {
       borderLeftColor: colors.accent,
       paddingLeft: 9,
     } as ViewStyle,
+    menuIconBox: {
+      width: 18,
+      height: 18,
+      alignItems: "center",
+      justifyContent: "center",
+      flexShrink: 0,
+    } as ViewStyle,
+    projectIconFallback: {
+      borderRadius: 4,
+      backgroundColor: colors.foregroundMuted + "20",
+    } as ViewStyle,
+    projectIconFallbackText: {
+      color: colors.foreground,
+      fontSize: 10,
+      lineHeight: 14,
+      fontWeight: "600",
+    } as TextStyle,
     menuTextGroup: {
       flex: 1,
       minWidth: 0,

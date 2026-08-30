@@ -23,7 +23,10 @@ export function WorkspaceCreatorPanel({
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
   const [selectedProjectId, setSelectedProjectId] = useState(projectId);
   const [isolation, setIsolation] = useState<Isolation>("worktree");
-  const [baseBranch, setBaseBranch] = useState("main");
+  const [baseBranch, setBaseBranch] = useState(() => {
+    const initialProject = projects.find((project) => project.projectId === projectId);
+    return initialProject?.defaultBranch ?? initialProject?.branches[0]?.id ?? "main";
+  });
 
   const selectedProject = useMemo(
     () =>
@@ -31,7 +34,8 @@ export function WorkspaceCreatorPanel({
         projectId,
         projectDisplayName,
         projectDirectory: projectDirectory ?? "",
-        branches: ["main"],
+        branches: [{ id: "main", label: "main", detail: "本地分支" }],
+        defaultBranch: "main",
       },
     [projectDirectory, projectDisplayName, projectId, projects, selectedProjectId],
   );
@@ -80,7 +84,11 @@ export function WorkspaceCreatorPanel({
       const nextProject = projects.find((project) => project.projectId === nextProjectId);
       if (!nextProject) return;
       setSelectedProjectId(nextProjectId);
-      setBaseBranch(nextProject.branches.includes(baseBranch) ? baseBranch : "main");
+      setBaseBranch(
+        nextProject.branches.some((branch) => branch.id === baseBranch)
+          ? baseBranch
+          : nextProject.defaultBranch ?? nextProject.branches[0]?.id ?? "main",
+      );
       setSnapshot(null);
       setSelection(null);
       setOpenMenu(null);

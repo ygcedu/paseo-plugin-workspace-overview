@@ -6,11 +6,19 @@ export type PaseoClient = ReturnType<typeof import("@getpaseo/plugin").usePaseo>
 export type OpenMenu = "project" | "host" | "isolation" | "base" | "launch" | "provider" | "model" | "mode" | "thinking" | null;
 export type Isolation = "local" | "worktree";
 
+export interface GitBranchOption {
+  id: string;
+  label: string;
+  detail: string;
+}
+
 export interface WorkspaceProjectOption {
   projectId: string;
   projectDisplayName: string;
   projectDirectory: string;
-  branches: string[];
+  branches: GitBranchOption[];
+  defaultBranch: string | null;
+  projectIconDataUri?: string | null;
 }
 
 interface ThinkingOption {
@@ -34,7 +42,7 @@ export interface ProviderEntry {
   enabled?: boolean;
   label?: string;
   defaultModeId?: string | null;
-  modes?: Array<{ id: string; label?: string }>;
+  modes?: Array<{ id: string; label?: string; description?: string; icon?: string }>;
   models?: ProviderModel[];
 }
 
@@ -74,6 +82,8 @@ export interface MenuOption {
   id: string;
   label: string;
   detail?: string;
+  iconName?: string;
+  projectIconDataUri?: string | null;
 }
 
 const WORKTREE_SLUG_PREFIX = "workspace";

@@ -6,6 +6,10 @@ import {
 } from "./open-agent-impl.server";
 import { WorkspaceOverview } from "./workspace-overview.client";
 import { WorkspaceAgentsPanel } from "./workspace-agents.client";
+import { projectIconRpc } from "./shared/project-icon";
+import { readPaseoProjectIcon } from "./project-icon-impl.server";
+import { gitBranchesRpc } from "./shared/git-branches";
+import { readGitBranches } from "./git-branches-impl.server";
 
 export default function contribute(plugin: PluginContext) {
   // Global sidebar surface: shows all workspaces with agent counts as cards
@@ -43,6 +47,14 @@ export default function contribute(plugin: PluginContext) {
     await openDeepLinkInDesktop(buildAgentDeepLinkUrl(serverId, agentId));
     return { ok: true };
   });
+
+  plugin.handle(projectIconRpc, async ({ projectId, projectDirectory }) => ({
+    dataUri: await readPaseoProjectIcon(projectId, projectDirectory),
+  }));
+
+  plugin.handle(gitBranchesRpc, async ({ projectDirectory }) =>
+    readGitBranches(projectDirectory),
+  );
 
   return () => {};
 }
