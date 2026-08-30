@@ -3,7 +3,6 @@ import { Text, TouchableOpacity, View, type ViewStyle, type TextStyle } from "re
 import { type PluginSurfaceProps } from "@getpaseo/plugin";
 import { Icon } from "@getpaseo/plugin/react-native";
 import { type WorkspaceEntry, type AgentEntry, type ProjectCardProps } from "../overview.types";
-import { ChevronIcon } from "./ChevronIcon";
 import { BranchRow } from "./BranchRow";
 import { AgentRow } from "./AgentRow";
 
@@ -101,13 +100,9 @@ export function ProjectCard({
         createBtn: {
           width: 26,
           height: 26,
-          borderRadius: 13,
           alignItems: "center" as const,
           justifyContent: "center" as const,
           marginLeft: 8,
-          borderWidth: 1,
-          borderColor: theme.colors.foregroundMuted + "44",
-          backgroundColor: theme.colors.foregroundMuted + "11",
         } as ViewStyle,
         body: {
           paddingVertical: 0,
@@ -131,7 +126,7 @@ export function ProjectCard({
       <TouchableOpacity onPress={toggleCard} activeOpacity={0.7}>
         <View style={styles.header}>
           <View style={styles.headerChevron}>
-            <ChevronIcon expanded={cardIsExpanded} color={theme.colors.foregroundMuted} size={10} />
+            <Icon name={cardIsExpanded ? "ChevronDown" : "ChevronRight"} color={theme.colors.foregroundMuted} size={10} />
           </View>
           <Text style={styles.title} numberOfLines={1}>
             {projectDisplayName}
@@ -142,6 +137,8 @@ export function ProjectCard({
           </Text>
           {onCreateWorktree ? (
             <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={`为 ${projectDisplayName} 新建 workspace`}
               style={styles.createBtn}
               onPress={(event) => {
                 event.stopPropagation();
@@ -149,7 +146,7 @@ export function ProjectCard({
               }}
               hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             >
-              <Icon name="Plus" color={theme.colors.foregroundMuted} size={16} />
+              <Icon name="Plus" color={theme.colors.foregroundMuted} size={18} />
             </TouchableOpacity>
           ) : null}
         </View>

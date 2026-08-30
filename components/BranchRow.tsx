@@ -1,8 +1,8 @@
 import React, { useMemo } from "react";
 import { Text, TouchableOpacity, View, type ViewStyle, type TextStyle } from "react-native";
 import { type PluginSurfaceProps } from "@getpaseo/plugin";
+import { Icon } from "@getpaseo/plugin/react-native";
 import { type WorkspaceEntry, type AgentEntry, KIND_LABEL } from "../overview.types";
-import { ChevronIcon } from "./ChevronIcon";
 import { BadgeWithTooltip, statusColor } from "./Tooltip";
 
 export function BranchRow({
@@ -77,7 +77,7 @@ export function BranchRow({
     <TouchableOpacity onPress={onToggle} activeOpacity={0.7}>
       <View style={styles.row}>
         <View style={styles.chevron}>
-          <ChevronIcon expanded={expanded} color={theme.colors.foregroundMuted} size={10} />
+          <Icon name={expanded ? "ChevronDown" : "ChevronRight"} color={theme.colors.foregroundMuted} size={10} />
         </View>
         <Text style={styles.name} numberOfLines={1}>
           {branchLabel}
