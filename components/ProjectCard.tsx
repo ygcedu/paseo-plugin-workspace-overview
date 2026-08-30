@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo } from "react";
 import { Text, TouchableOpacity, View, type ViewStyle, type TextStyle } from "react-native";
 import { type PluginSurfaceProps } from "@getpaseo/plugin";
+import { Icon } from "@getpaseo/plugin/react-native";
 import { type WorkspaceEntry, type AgentEntry, type ProjectCardProps } from "../overview.types";
 import { ChevronIcon } from "./ChevronIcon";
 import { BranchRow } from "./BranchRow";
@@ -108,12 +109,6 @@ export function ProjectCard({
           borderColor: theme.colors.foregroundMuted + "44",
           backgroundColor: theme.colors.foregroundMuted + "11",
         } as ViewStyle,
-        createBtnText: {
-          color: theme.colors.foregroundMuted,
-          fontSize: 18,
-          lineHeight: 20,
-          fontWeight: "300" as const,
-        } as TextStyle,
         body: {
           paddingVertical: 0,
         } as ViewStyle,
@@ -154,7 +149,7 @@ export function ProjectCard({
               }}
               hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             >
-              <Text style={styles.createBtnText}>+</Text>
+              <Icon name="Plus" color={theme.colors.foregroundMuted} size={16} />
             </TouchableOpacity>
           ) : null}
         </View>

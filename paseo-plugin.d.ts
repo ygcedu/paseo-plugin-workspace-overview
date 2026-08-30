@@ -1,3 +1,15 @@
+declare module "@getpaseo/plugin/react-native" {
+  import type { ComponentType } from "react";
+
+  export interface IconProps {
+    name: string;
+    size?: number;
+    color?: string;
+  }
+
+  export const Icon: ComponentType<IconProps>;
+}
+
 declare module "@getpaseo/plugin/server" {
   import type { PaseoApi } from "@getpaseo/client";
   import type { ZodType, input as ZodInput, output as ZodOutput } from "zod";

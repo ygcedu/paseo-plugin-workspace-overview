@@ -17,9 +17,10 @@ import {
   type ChatModelRunOptions,
 } from "@assistant-ui/react-native";
 import type { PluginSurfaceProps } from "@getpaseo/plugin";
+import { Icon } from "@getpaseo/plugin/react-native";
 
 type PaseoClient = ReturnType<typeof import("@getpaseo/plugin").usePaseo>;
-type OpenMenu = "project" | "isolation" | "base" | "provider" | "model" | "mode" | "thinking" | null;
+type OpenMenu = "project" | "host" | "isolation" | "base" | "launch" | "provider" | "model" | "mode" | "thinking" | null;
 type Isolation = "local" | "worktree";
 
 interface WorkspaceProjectOption {
@@ -73,6 +74,7 @@ interface WorkspaceCreateDialogProps {
   projectId: string;
   projectDisplayName: string;
   projectDirectory: string | undefined;
+  hostLabel: string;
   projects: WorkspaceProjectOption[];
   paseo: PaseoClient;
   onClose: () => void;
@@ -91,8 +93,10 @@ const PROVIDER_READY_TIMEOUT_MS = 10000;
 const MAX_MENU_HEIGHT = 260;
 const MENU_WIDTH_BY_KIND: Record<Exclude<OpenMenu, null>, number> = {
   project: 360,
+  host: 240,
   isolation: 220,
   base: 240,
+  launch: 260,
   provider: 260,
   model: 340,
   mode: 220,
@@ -296,356 +300,19 @@ function opaqueSurfaceColor(surface: string, foreground: string): string {
   return brightness > 128 ? "#171717" : "#ffffff";
 }
 
-function ChevronDownGlyph({ color, size = 10 }: { color: string; size?: number }) {
-  const thickness = Math.max(1.5, size / 7);
-  const bar = size * 0.68;
-  return (
-    <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
-      <View
-        style={{
-          position: "absolute",
-          width: bar,
-          height: thickness,
-          borderRadius: thickness / 2,
-          backgroundColor: color,
-          transform: [{ translateX: -bar * 0.23 }, { rotate: "45deg" }],
-        }}
-      />
-      <View
-        style={{
-          position: "absolute",
-          width: bar,
-          height: thickness,
-          borderRadius: thickness / 2,
-          backgroundColor: color,
-          transform: [{ translateX: bar * 0.23 }, { rotate: "-45deg" }],
-        }}
-      />
-    </View>
-  );
-}
-
-function CheckGlyph({ color, size = 13 }: { color: string; size?: number }) {
-  const thickness = Math.max(1.5, size / 7);
-  return (
-    <View style={{ width: size, height: size, justifyContent: "center", alignItems: "center" }}>
-      <View
-        style={{
-          position: "absolute",
-          width: size * 0.42,
-          height: thickness,
-          borderRadius: thickness / 2,
-          backgroundColor: color,
-          transform: [{ translateX: -size * 0.2 }, { translateY: size * 0.12 }, { rotate: "45deg" }],
-        }}
-      />
-      <View
-        style={{
-          position: "absolute",
-          width: size * 0.78,
-          height: thickness,
-          borderRadius: thickness / 2,
-          backgroundColor: color,
-          transform: [{ translateX: size * 0.13 }, { rotate: "-45deg" }],
-        }}
-      />
-    </View>
-  );
-}
-
-function CloseGlyph({ color, size = 13 }: { color: string; size?: number }) {
-  const thickness = Math.max(1.5, size / 7);
-  return (
-    <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
-      <View
-        style={{
-          position: "absolute",
-          width: size,
-          height: thickness,
-          borderRadius: thickness / 2,
-          backgroundColor: color,
-          transform: [{ rotate: "45deg" }],
-        }}
-      />
-      <View
-        style={{
-          position: "absolute",
-          width: size,
-          height: thickness,
-          borderRadius: thickness / 2,
-          backgroundColor: color,
-          transform: [{ rotate: "-45deg" }],
-        }}
-      />
-    </View>
-  );
-}
-
-function ArrowUpGlyph({ color, size = 15 }: { color: string; size?: number }) {
-  const thickness = Math.max(1.7, size / 8);
-  return (
-    <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
-      <View
-        style={{
-          position: "absolute",
-          left: (size - thickness) / 2,
-          top: size * 0.2,
-          width: thickness,
-          height: size * 0.64,
-          borderRadius: thickness / 2,
-          backgroundColor: color,
-        }}
-      />
-      <View
-        style={{
-          position: "absolute",
-          left: size * 0.22,
-          top: size * 0.3,
-          width: size * 0.42,
-          height: thickness,
-          borderRadius: thickness / 2,
-          backgroundColor: color,
-          transform: [{ rotate: "-45deg" }],
-        }}
-      />
-      <View
-        style={{
-          position: "absolute",
-          right: size * 0.22,
-          top: size * 0.3,
-          width: size * 0.42,
-          height: thickness,
-          borderRadius: thickness / 2,
-          backgroundColor: color,
-          transform: [{ rotate: "45deg" }],
-        }}
-      />
-    </View>
-  );
-}
-
-function ModelGlyph({ color, size = 16 }: { color: string; size?: number }) {
-  const dot = Math.max(3, size * 0.24);
-  return (
-    <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
-      <View
-        style={{
-          width: size * 0.72,
-          height: size * 0.72,
-          borderRadius: size,
-          borderWidth: 1.6,
-          borderColor: color,
-        }}
-      />
-      <View
-        style={{
-          position: "absolute",
-          width: dot,
-          height: dot,
-          borderRadius: dot / 2,
-          backgroundColor: color,
-        }}
-      />
-    </View>
-  );
-}
-
-function ModeGlyph({ color, size = 16 }: { color: string; size?: number }) {
-  const thickness = Math.max(1.5, size / 9);
-  return (
-    <View style={{ width: size, height: size, justifyContent: "center" }}>
-      {[0.28, 0.5, 0.72].map((top, index) => (
-        <View
-          key={index}
-          style={{
-            position: "absolute",
-            top: size * top,
-            left: size * 0.12,
-            width: size * 0.76,
-            height: thickness,
-            borderRadius: thickness / 2,
-            backgroundColor: color,
-          }}
-        />
-      ))}
-    </View>
-  );
-}
-
-function ThinkingGlyph({ color, size = 16 }: { color: string; size?: number }) {
-  return (
-    <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
-      <View
-        style={{
-          width: size * 0.72,
-          height: size * 0.72,
-          borderRadius: size * 0.22,
-          borderWidth: 1.6,
-          borderColor: color,
-        }}
-      />
-      <View
-        style={{
-          position: "absolute",
-          width: size * 0.32,
-          height: size * 0.32,
-          borderRadius: size * 0.16,
-          borderWidth: 1.4,
-          borderColor: color,
-        }}
-      />
-    </View>
-  );
-}
-
-function ProviderGlyph({ color, size = 16 }: { color: string; size?: number }) {
-  const line = Math.max(1.5, size / 8);
-  return (
-    <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
-      <View
-        style={{
-          width: size * 0.72,
-          height: size * 0.72,
-          borderRadius: size * 0.16,
-          borderWidth: line,
-          borderColor: color,
-        }}
-      />
-      <View
-        style={{
-          position: "absolute",
-          width: size * 0.32,
-          height: line,
-          borderRadius: line / 2,
-          backgroundColor: color,
-        }}
-      />
-    </View>
-  );
-}
-
 function ControlGlyph({ kind, color }: { kind: Exclude<OpenMenu, null>; color: string }) {
-  if (kind === "provider") return <ProviderGlyph color={color} />;
-  if (kind === "model") return <ModelGlyph color={color} />;
-  if (kind === "mode") return <ModeGlyph color={color} />;
-  return <ThinkingGlyph color={color} />;
-}
-
-function FolderGlyph({ color, size = 16 }: { color: string; size?: number }) {
-  const thickness = Math.max(1.5, size / 9);
-  return (
-    <View style={{ width: size, height: size, justifyContent: "center", alignItems: "center" }}>
-      <View
-        style={{
-          position: "absolute",
-          top: size * 0.22,
-          left: size * 0.12,
-          width: size * 0.32,
-          height: size * 0.18,
-          borderTopLeftRadius: 2,
-          borderTopRightRadius: 2,
-          backgroundColor: color,
-        }}
-      />
-      <View
-        style={{
-          width: size * 0.78,
-          height: size * 0.58,
-          marginTop: size * 0.16,
-          borderRadius: 3,
-          borderWidth: thickness,
-          borderColor: color,
-        }}
-      />
-    </View>
-  );
-}
-
-function BranchGlyph({ color, size = 16 }: { color: string; size?: number }) {
-  const thickness = Math.max(1.5, size / 9);
-  const dot = size * 0.22;
-  return (
-    <View style={{ width: size, height: size }}>
-      <View
-        style={{
-          position: "absolute",
-          left: size * 0.28,
-          top: size * 0.18,
-          width: thickness,
-          height: size * 0.64,
-          borderRadius: thickness / 2,
-          backgroundColor: color,
-        }}
-      />
-      <View
-        style={{
-          position: "absolute",
-          left: size * 0.28,
-          top: size * 0.5,
-          width: size * 0.36,
-          height: thickness,
-          borderRadius: thickness / 2,
-          backgroundColor: color,
-        }}
-      />
-      <View
-        style={{
-          position: "absolute",
-          left: size * 0.6,
-          top: size * 0.34,
-          width: thickness,
-          height: size * 0.18,
-          borderRadius: thickness / 2,
-          backgroundColor: color,
-        }}
-      />
-      {[{ x: 0.2, y: 0.12 }, { x: 0.2, y: 0.72 }, { x: 0.52, y: 0.24 }].map((point, index) => (
-        <View
-          key={index}
-          style={{
-            position: "absolute",
-            left: size * point.x,
-            top: size * point.y,
-            width: dot,
-            height: dot,
-            borderRadius: dot / 2,
-            borderWidth: thickness,
-            borderColor: color,
-            backgroundColor: "transparent",
-          }}
-        />
-      ))}
-    </View>
-  );
-}
-
-function ChatGlyph({ color, size = 16 }: { color: string; size?: number }) {
-  const thickness = Math.max(1.5, size / 9);
-  return (
-    <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
-      <View
-        style={{
-          width: size * 0.72,
-          height: size * 0.6,
-          borderRadius: size * 0.3,
-          borderWidth: thickness,
-          borderColor: color,
-        }}
-      />
-      <View
-        style={{
-          position: "absolute",
-          left: size * 0.28,
-          bottom: size * 0.16,
-          width: size * 0.22,
-          height: thickness,
-          borderRadius: thickness / 2,
-          backgroundColor: color,
-          transform: [{ rotate: "-35deg" }],
-        }}
-      />
-    </View>
-  );
+  const names: Record<Exclude<OpenMenu, null>, string> = {
+    project: "Folder",
+    host: "Circle",
+    isolation: "GitBranch",
+    base: "GitBranch",
+    launch: "MessageCircle",
+    provider: "Boxes",
+    model: "Atom",
+    mode: "ListFilter",
+    thinking: "Brain",
+  };
+  return <Icon name={names[kind]} color={color} size={16} />;
 }
 
 function Badge({
@@ -677,7 +344,7 @@ function Badge({
       <Text style={styles.badgeText} numberOfLines={1}>
         {label}
       </Text>
-      {selectable ? <ChevronDownGlyph color={theme.colors.foregroundMuted} size={9} /> : null}
+      {selectable ? <Icon name="ChevronDown" color={theme.colors.foregroundMuted} size={12} /> : null}
     </Pressable>
   );
 }
@@ -689,6 +356,7 @@ function SelectControl({
   open,
   onPress,
   theme,
+  iconName,
 }: {
   kind: Exclude<OpenMenu, null>;
   value: string;
@@ -696,6 +364,7 @@ function SelectControl({
   open: boolean;
   onPress: () => void;
   theme: PluginSurfaceProps["theme"];
+  iconName?: string;
 }) {
   const styles = useMemo(() => createControlStyles(theme), [theme]);
   const iconColor = theme.colors.foregroundMuted;
@@ -705,11 +374,11 @@ function SelectControl({
       onPress={onPress}
       style={[styles.control, open && styles.controlOpen, disabled && styles.controlDisabled]}
     >
-      <ControlGlyph kind={kind} color={iconColor} />
+      {kind === "provider" ? null : iconName ? <Icon name={iconName} color={iconColor} size={16} /> : <ControlGlyph kind={kind} color={iconColor} />}
       <Text style={styles.controlValue} numberOfLines={1}>
         {value}
       </Text>
-      <ChevronDownGlyph color={iconColor} size={9} />
+      <Icon name="ChevronDown" color={iconColor} size={12} />
     </Pressable>
   );
 }
@@ -771,7 +440,7 @@ function Menu({
                   </Text>
                 ) : null}
               </View>
-              {selected ? <CheckGlyph color={theme.colors.accent} /> : null}
+              {selected ? <Icon name="Check" color={theme.colors.accent} size={13} /> : null}
             </Pressable>
           );
         })}
@@ -780,8 +449,92 @@ function Menu({
   );
 }
 
+function providerIconName(providerId: string): string {
+  const normalized = providerId.toLowerCase();
+  if (normalized.includes("codex") || normalized.includes("openai")) return "Atom";
+  if (normalized.includes("claude") || normalized.includes("anthropic")) return "Sparkles";
+  if (normalized.includes("copilot") || normalized.includes("github")) return "Github";
+  return "Bot";
+}
+
+function ModelBrowserMenu({
+  providers,
+  selection,
+  onSelect,
+  theme,
+}: {
+  providers: ProviderEntry[];
+  selection: ComposerSelection | null;
+  onSelect: (id: string) => void;
+  theme: PluginSurfaceProps["theme"];
+}) {
+  const [providerId, setProviderId] = useState<string | null>(null);
+  const styles = useMemo(() => createMenuStyles(theme), [theme]);
+  const backgroundColor = opaqueSurfaceColor(theme.colors.surface0, theme.colors.foreground);
+  const provider = providerId ? providers.find((entry) => entry.provider === providerId) ?? null : null;
+  const models = selectableModels(provider);
+
+  return (
+    <View style={[styles.menu, styles.menuAbove, styles.modelBrowserMenu, { left: 0 }]}>
+      {provider ? (
+        <>
+          <Pressable onPress={() => setProviderId(null)} style={[styles.modelBrowserHeader, { backgroundColor }]}>
+            <Icon name="ChevronLeft" color={theme.colors.foregroundMuted} size={16} />
+            <Icon name={providerIconName(provider.provider)} color={theme.colors.foregroundMuted} size={16} />
+            <Text style={styles.modelBrowserTitle} numberOfLines={1}>{provider.label ?? provider.provider}</Text>
+          </Pressable>
+          <View style={styles.modelBrowserSeparator} />
+          <ScrollView style={[styles.menuScroll, { backgroundColor }]} contentContainerStyle={{ backgroundColor }}>
+            {models.map((model) => {
+              const selected = selection?.providerId === provider.provider && selection.modelId === model.id;
+              return (
+                <Pressable
+                  key={model.id}
+                  onPress={() => onSelect(`${provider.provider}::${model.id}`)}
+                  style={[styles.menuItem, { backgroundColor }]}
+                >
+                  <View style={styles.menuTextGroup}>
+                    <Text style={styles.menuLabel} numberOfLines={1}>{model.label}</Text>
+                    {model.id !== model.label ? <Text style={styles.menuDetail} numberOfLines={1}>{model.id}</Text> : null}
+                  </View>
+                  <View style={styles.modelBrowserTrailing}>
+                    {selected ? <Icon name="Check" color={theme.colors.foregroundMuted} size={16} /> : null}
+                  </View>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </>
+      ) : (
+        <>
+          <View style={[styles.modelBrowserHeading, { backgroundColor }]}>
+            <Text style={styles.modelBrowserSectionLabel}>Providers</Text>
+          </View>
+          <ScrollView style={[styles.menuScroll, { backgroundColor }]} contentContainerStyle={{ backgroundColor }}>
+            {providers.map((entry, index) => {
+              const count = selectableModels(entry).length;
+              return (
+                <View key={entry.provider}>
+                  {index > 0 ? <View style={styles.modelBrowserSeparator} /> : null}
+                  <Pressable onPress={() => setProviderId(entry.provider)} style={[styles.menuItem, styles.modelBrowserProviderRow, { backgroundColor }]}>
+                    <Icon name={providerIconName(entry.provider)} color={theme.colors.foregroundMuted} size={16} />
+                    <Text style={[styles.menuLabel, styles.modelBrowserProviderLabel]} numberOfLines={1}>{entry.label ?? entry.provider}</Text>
+                    <Text style={styles.modelBrowserCount}>{count} {count === 1 ? "model" : "models"}</Text>
+                    <Icon name="ChevronRight" color={theme.colors.foregroundMuted} size={16} />
+                  </Pressable>
+                </View>
+              );
+            })}
+          </ScrollView>
+        </>
+      )}
+    </View>
+  );
+}
+
 function WorkspaceCreateComposer({
   project,
+  hostLabel,
   projects,
   isolation,
   baseBranch,
@@ -803,6 +556,7 @@ function WorkspaceCreateComposer({
   theme,
 }: {
   project: WorkspaceProjectOption | null;
+  hostLabel: string;
   projects: WorkspaceProjectOption[];
   isolation: Isolation;
   baseBranch: string;
@@ -868,11 +622,13 @@ function WorkspaceCreateComposer({
     label: entry.label ?? entry.provider,
     detail: entry.provider,
   }));
-  const modelOptions = models.map((item) => ({
-    id: item.id,
-    label: item.label,
-    detail: item.id,
-  }));
+  const modelOptions = providers.flatMap((entry) =>
+    selectableModels(entry).map((item) => ({
+      id: `${entry.provider}::${item.id}`,
+      label: item.label,
+      detail: entry.label ?? entry.provider,
+    })),
+  );
   const modeOptions = modes.map((item) => ({
     id: item.id,
     label: item.label ?? item.id,
@@ -895,7 +651,9 @@ function WorkspaceCreateComposer({
     id: branch,
     label: branch,
   }));
-  const topMenuOpen = openMenu === "project" || openMenu === "isolation" || openMenu === "base";
+  const launchOptions: MenuOption[] = [{ id: "chat", label: "Chat", detail: "Create a chat workspace" }];
+  const hostOptions: MenuOption[] = [{ id: "current", label: hostLabel }];
+  const topMenuOpen = openMenu === "project" || openMenu === "host" || openMenu === "isolation" || openMenu === "base" || openMenu === "launch";
   const composerMenuOpen =
     openMenu === "provider" || openMenu === "model" || openMenu === "mode" || openMenu === "thinking";
 
@@ -909,13 +667,13 @@ function WorkspaceCreateComposer({
             <Text style={styles.title}>新建 workspace</Text>
           </View>
           <Pressable disabled={pending} onPress={onClose} style={styles.closeButton}>
-            <CloseGlyph color={theme.colors.foregroundMuted} />
+            <Icon name="X" color={theme.colors.foregroundMuted} size={14} />
           </Pressable>
         </View>
         <View style={[styles.formStackDesktop, topMenuOpen && styles.menuRegionActive]}>
           <View nativeID="workspace-create-dropdown-project" style={[styles.controlAnchor, openMenu === "project" && styles.controlAnchorOpen]}>
             <Badge
-              icon={<FolderGlyph color={theme.colors.foregroundMuted} />}
+              icon={<Icon name="Folder" color={theme.colors.foregroundMuted} size={16} />}
               label={project.projectDisplayName}
               selectable={projects.length > 1}
               disabled={pending}
@@ -926,15 +684,22 @@ function WorkspaceCreateComposer({
               <Menu kind="project" placement="below" options={projectOptions} selectedId={project.projectId} onSelect={onSelectProject} theme={theme} />
             ) : null}
           </View>
-          <View style={styles.hostBadge}>
-            <View style={styles.hostStatusDot} />
-            <Text style={styles.hostText} numberOfLines={1}>
-              本机
-            </Text>
+          <View nativeID="workspace-create-dropdown-host" style={[styles.controlAnchor, openMenu === "host" && styles.controlAnchorOpen]}>
+            <Badge
+              icon={<View style={styles.hostStatusDot} />}
+              label={hostLabel}
+              selectable
+              disabled={pending}
+              onPress={() => onToggleMenu(openMenu === "host" ? null : "host")}
+              theme={theme}
+            />
+            {openMenu === "host" ? (
+              <Menu kind="host" placement="below" options={hostOptions} selectedId="current" onSelect={() => onToggleMenu(null)} theme={theme} />
+            ) : null}
           </View>
           <View nativeID="workspace-create-dropdown-isolation" style={[styles.controlAnchor, openMenu === "isolation" && styles.controlAnchorOpen]}>
             <Badge
-              icon={<BranchGlyph color={theme.colors.foregroundMuted} />}
+              icon={<Icon name="GitBranch" color={theme.colors.foregroundMuted} size={16} />}
               label={isolation === "worktree" ? "新建 worktree" : "Local"}
               selectable
               disabled={pending}
@@ -947,7 +712,7 @@ function WorkspaceCreateComposer({
           </View>
           <View nativeID="workspace-create-dropdown-base" style={[styles.controlAnchor, openMenu === "base" && styles.controlAnchorOpen]}>
             <Badge
-              icon={<BranchGlyph color={theme.colors.foregroundMuted} />}
+              icon={<Icon name="GitBranch" color={theme.colors.foregroundMuted} size={16} />}
               label={isolation === "worktree" ? baseBranch : project.projectDisplayName}
               selectable={isolation === "worktree" && baseOptions.length > 1}
               disabled={pending || isolation !== "worktree"}
@@ -959,8 +724,19 @@ function WorkspaceCreateComposer({
             ) : null}
           </View>
           <View style={styles.launchSpacer} />
-          <Badge icon={<ChatGlyph color={theme.colors.foregroundMuted} />} label="Chat" theme={theme} />
-
+          <View nativeID="workspace-create-dropdown-launch" style={[styles.controlAnchor, openMenu === "launch" && styles.controlAnchorOpen]}>
+            <Badge
+              icon={<Icon name="MessageCircle" color={theme.colors.foregroundMuted} size={16} />}
+              label="Chat"
+              selectable
+              disabled={pending}
+              onPress={() => onToggleMenu(openMenu === "launch" ? null : "launch")}
+              theme={theme}
+            />
+            {openMenu === "launch" ? (
+              <Menu kind="launch" placement="below" options={launchOptions} selectedId="chat" onSelect={() => onToggleMenu(null)} theme={theme} />
+            ) : null}
+          </View>
         </View>
 
         <ComposerPrimitive.Root style={[styles.inputWrapper, composerMenuOpen && styles.menuRegionActive]}>
@@ -976,24 +752,20 @@ function WorkspaceCreateComposer({
 
           <View style={styles.buttonRow}>
             <View style={styles.leftControls}>
-              <View nativeID="workspace-create-dropdown-provider" style={[styles.controlAnchor, openMenu === "provider" && styles.controlAnchorOpen]}>
-                <SelectControl kind="provider" value={providerLoading ? "Loading" : formatControlValue(selection?.providerLabel ?? null, "Provider")} disabled={pending || providerLoading || providerOptions.length <= 1} open={openMenu === "provider"} onPress={() => onToggleMenu(openMenu === "provider" ? null : "provider")} theme={theme} />
-                {openMenu === "provider" ? <Menu kind="provider" options={providerOptions} selectedId={selection?.providerId ?? null} onSelect={onSelectProvider} theme={theme} /> : null}
-              </View>
               <View nativeID="workspace-create-dropdown-model" style={[styles.controlAnchor, openMenu === "model" && styles.controlAnchorOpen]}>
                 <SelectControl kind="model" value={formatControlValue(selection?.modelLabel ?? null, "Model")} disabled={pending || providerLoading || modelOptions.length <= 1} open={openMenu === "model"} onPress={() => onToggleMenu(openMenu === "model" ? null : "model")} theme={theme} />
-                {openMenu === "model" ? <Menu kind="model" options={modelOptions} selectedId={selection?.modelId ?? null} onSelect={onSelectModel} theme={theme} /> : null}
+                {openMenu === "model" ? <ModelBrowserMenu providers={providers} selection={selection} onSelect={onSelectModel} theme={theme} /> : null}
               </View>
-              {modeOptions.length > 0 ? (
-                <View nativeID="workspace-create-dropdown-mode" style={[styles.controlAnchor, openMenu === "mode" && styles.controlAnchorOpen]}>
-                  <SelectControl kind="mode" value={formatControlValue(selection?.modeLabel ?? null, "Mode")} disabled={pending || providerLoading || modeOptions.length <= 1} open={openMenu === "mode"} onPress={() => onToggleMenu(openMenu === "mode" ? null : "mode")} theme={theme} />
-                  {openMenu === "mode" ? <Menu kind="mode" options={modeOptions} selectedId={selection?.modeId ?? null} onSelect={onSelectMode} theme={theme} /> : null}
-                </View>
-              ) : null}
               {thinkingOptionsForMenu.length > 0 ? (
                 <View nativeID="workspace-create-dropdown-thinking" style={[styles.controlAnchor, openMenu === "thinking" && styles.controlAnchorOpen]}>
                   <SelectControl kind="thinking" value={formatControlValue(selection?.thinkingLabel ?? null, "Thinking")} disabled={pending || providerLoading || thinkingOptionsForMenu.length <= 1} open={openMenu === "thinking"} onPress={() => onToggleMenu(openMenu === "thinking" ? null : "thinking")} theme={theme} />
                   {openMenu === "thinking" ? <Menu kind="thinking" options={thinkingOptionsForMenu} selectedId={selection?.thinkingOptionId ?? null} onSelect={onSelectThinking} theme={theme} /> : null}
+                </View>
+              ) : null}
+              {modeOptions.length > 0 ? (
+                <View nativeID="workspace-create-dropdown-mode" style={[styles.controlAnchor, openMenu === "mode" && styles.controlAnchorOpen]}>
+                  <SelectControl kind="mode" iconName={selection?.modeId === "full-access" ? "ShieldOff" : selection?.modeId === "auto-review" ? "ShieldCheck" : "Shield"} value={formatControlValue(selection?.modeLabel ?? null, "Mode")} disabled={pending || providerLoading || modeOptions.length <= 1} open={openMenu === "mode"} onPress={() => onToggleMenu(openMenu === "mode" ? null : "mode")} theme={theme} />
+                  {openMenu === "mode" ? <Menu kind="mode" options={modeOptions} selectedId={selection?.modeId ?? null} onSelect={onSelectMode} theme={theme} /> : null}
                 </View>
               ) : null}
             </View>
@@ -1004,7 +776,7 @@ function WorkspaceCreateComposer({
                 disabled={pending}
                 style={[styles.sendButton, pending && styles.disabled]}
               >
-                <ArrowUpGlyph color={theme.colors.accentForeground} />
+                <Icon name="CornerDownLeft" color={theme.colors.accentForeground} size={16} />
               </ComposerPrimitive.Send>
             </View>
           </View>
@@ -1019,6 +791,7 @@ export function WorkspaceCreateDialog({
   projectId,
   projectDisplayName,
   projectDirectory,
+  hostLabel,
   projects,
   paseo,
   onClose,
@@ -1106,8 +879,11 @@ export function WorkspaceCreateDialog({
   }, []);
 
   const selectModel = useCallback(
-    (modelId: string) => {
-      const entry = providerById(snapshot, selection?.providerId ?? "");
+    (combinedId: string) => {
+      const separator = combinedId.indexOf("::");
+      const providerId = separator >= 0 ? combinedId.slice(0, separator) : selection?.providerId ?? "";
+      const modelId = separator >= 0 ? combinedId.slice(separator + 2) : combinedId;
+      const entry = providerById(snapshot, providerId);
       const model = selectableModels(entry).find((item) => item.id === modelId) ?? null;
       if (entry && model) {
         setSelection(buildSelection(entry, model));
@@ -1186,6 +962,7 @@ export function WorkspaceCreateDialog({
     <AssistantRuntimeProvider runtime={runtime}>
       <WorkspaceCreateComposer
         project={selectedProject.projectDirectory ? selectedProject : null}
+        hostLabel={hostLabel}
         projects={projects}
         isolation={isolation}
         baseBranch={baseBranch}
@@ -1236,7 +1013,8 @@ function createComposerStyles(theme: PluginSurfaceProps["theme"]) {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      marginBottom: 16,
+      marginBottom: 28,
+      paddingLeft: 8,
     } as ViewStyle,
     headerText: {
       flex: 1,
@@ -1307,7 +1085,8 @@ function createComposerStyles(theme: PluginSurfaceProps["theme"]) {
       flexDirection: "column",
       gap: 12,
       backgroundColor: surface1,
-      borderWidth: 0,
+      borderWidth: 1,
+      borderColor: colors.foregroundMuted + "33",
       borderRadius: 16,
       paddingVertical: 16,
       paddingHorizontal: 16,
@@ -1317,8 +1096,8 @@ function createComposerStyles(theme: PluginSurfaceProps["theme"]) {
     } as ViewStyle,
     textInput: {
       width: "100%",
-      minHeight: 56,
-      maxHeight: 180,
+      minHeight: 46,
+      maxHeight: 160,
       color: colors.foreground,
       fontSize: 15,
       lineHeight: 21,
@@ -1330,7 +1109,6 @@ function createComposerStyles(theme: PluginSurfaceProps["theme"]) {
       flexDirection: "row",
       alignItems: "flex-end",
       justifyContent: "space-between",
-      gap: 12,
       marginHorizontal: -6,
     } as ViewStyle,
     leftControls: {
@@ -1339,13 +1117,13 @@ function createComposerStyles(theme: PluginSurfaceProps["theme"]) {
       flexDirection: "row",
       alignItems: "flex-end",
       flexWrap: "wrap",
-      gap: 4,
+      gap: 0,
     } as ViewStyle,
     rightControls: {
       flexShrink: 0,
       flexDirection: "row",
       alignItems: "center",
-      gap: 8,
+      gap: 4,
     } as ViewStyle,
     pendingText: {
       color: colors.foregroundMuted,
@@ -1353,9 +1131,9 @@ function createComposerStyles(theme: PluginSurfaceProps["theme"]) {
       lineHeight: 16,
     } as TextStyle,
     sendButton: {
-      width: 32,
-      height: 32,
-      borderRadius: 16,
+      width: 28,
+      height: 28,
+      borderRadius: 14,
       backgroundColor: colors.accent,
       alignItems: "center",
       justifyContent: "center",
@@ -1383,12 +1161,9 @@ function createBadgeStyles(theme: PluginSurfaceProps["theme"]) {
       overflow: "hidden",
       paddingHorizontal: 8,
       borderRadius: 16,
-      gap: 8,
+      gap: 4,
     } as ViewStyle,
     badgeSelectable: {
-      backgroundColor: colors.foregroundMuted + "08",
-      borderWidth: 1,
-      borderColor: colors.foregroundMuted + "18",
     } as ViewStyle,
     badgeDisabled: {
       opacity: 0.5,
@@ -1418,7 +1193,7 @@ function createControlStyles(theme: PluginSurfaceProps["theme"]) {
       maxWidth: 220,
       flexDirection: "row",
       alignItems: "center",
-      gap: 7,
+      gap: 4,
       paddingHorizontal: 8,
       borderRadius: 14,
     } as ViewStyle,
@@ -1498,5 +1273,57 @@ function createMenuStyles(theme: PluginSurfaceProps["theme"]) {
       lineHeight: 15,
       marginTop: 2,
     } as TextStyle,
+    modelBrowserMenu: {
+      width: 360,
+      maxHeight: 400,
+      overflow: "hidden",
+    } as ViewStyle,
+    modelBrowserHeader: {
+      minHeight: 44,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      paddingHorizontal: 12,
+    } as ViewStyle,
+    modelBrowserTitle: {
+      flex: 1,
+      minWidth: 0,
+      color: colors.foreground,
+      fontSize: 14,
+      lineHeight: 20,
+      fontWeight: "500",
+    } as TextStyle,
+    modelBrowserHeading: {
+      paddingHorizontal: 12,
+      paddingTop: 10,
+      paddingBottom: 6,
+    } as ViewStyle,
+    modelBrowserSectionLabel: {
+      color: colors.foregroundMuted,
+      fontSize: 11,
+      lineHeight: 15,
+      fontWeight: "500",
+    } as TextStyle,
+    modelBrowserSeparator: {
+      height: 1,
+      backgroundColor: colors.foregroundMuted + "18",
+    } as ViewStyle,
+    modelBrowserProviderRow: {
+      minHeight: 44,
+    } as ViewStyle,
+    modelBrowserProviderLabel: {
+      flex: 1,
+      minWidth: 0,
+    } as TextStyle,
+    modelBrowserCount: {
+      color: colors.foregroundMuted,
+      fontSize: 12,
+      lineHeight: 16,
+    } as TextStyle,
+    modelBrowserTrailing: {
+      width: 20,
+      alignItems: "center",
+      justifyContent: "center",
+    } as ViewStyle,
   });
 }
