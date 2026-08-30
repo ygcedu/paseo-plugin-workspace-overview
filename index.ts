@@ -10,6 +10,8 @@ import { projectIconRpc } from "./shared/project-icon";
 import { readPaseoProjectIcon } from "./project-icon-impl.server";
 import { gitBranchesRpc } from "./shared/git-branches";
 import { readGitBranches } from "./git-branches-impl.server";
+import { terminalLaunchRpc } from "./shared/terminal-launch";
+import { launchWorkspaceTerminal } from "./terminal-launch-impl.server";
 
 export default function contribute(plugin: PluginContext) {
   // Global sidebar surface: shows all workspaces with agent counts as cards
@@ -55,6 +57,8 @@ export default function contribute(plugin: PluginContext) {
   plugin.handle(gitBranchesRpc, async ({ projectDirectory }) =>
     readGitBranches(projectDirectory),
   );
+
+  plugin.handle(terminalLaunchRpc, launchWorkspaceTerminal);
 
   return () => {};
 }

@@ -1,14 +1,25 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Text } from "react-native";
 import { AssistantRuntimeProvider, useLocalRuntime } from "@assistant-ui/react-native";
+import { useRpc } from "@getpaseo/plugin";
 import { WorkspaceCreateComposer } from "./WorkspaceCreateComposer";
-import { buildSelection, createWorkspaceChatModel, defaultSelection, providerById, PROVIDER_READY_TIMEOUT_MS, readPaseoProviderModelPreference, selectableModels, type ComposerSelection, type Isolation, type OpenMenu, type ProviderSnapshot, type WorkspaceCreatorPanelProps } from "./workspace-creator-shared";
+import { buildSelection, createWorkspaceChatModel, defaultSelection, providerById, PROVIDER_READY_TIMEOUT_MS, readPaseoProviderModelPreference, selectableModels, type ComposerSelection, type Isolation, type LaunchTarget, type OpenMenu, type ProviderSnapshot, type TerminalProfile, type WorkspaceCreatorPanelProps } from "./workspace-creator-shared";
+import { terminalLaunchRpc } from "../shared/terminal-launch";
+import { openAgentRpc } from "../shared/open-agent";
+
+const DEFAULT_TERMINAL_PROFILES: TerminalProfile[] = [
+  { id: "claude", name: "Claude Code", command: "claude", args: ["{{{prompt}}}"], icon: "claude" },
+  { id: "codex", name: "Codex", command: "codex", args: ["{{{prompt}}}"], icon: "codex" },
+  { id: "opencode", name: "OpenCode", command: "opencode", args: ["--prompt={{{prompt}}}"], icon: "opencode" },
+  { id: "pi", name: "Pi", command: "pi", args: ["{{{prompt}}}"], icon: "pi" },
+];
 
 export function WorkspaceCreatorPanel({
   projectId,
   projectDisplayName,
   projectDirectory,
   hostLabel,
+  hostId,
   projects,
   paseo,
   onClose,
@@ -27,6 +38,27 @@ export function WorkspaceCreatorPanel({
     const initialProject = projects.find((project) => project.projectId === projectId);
     return initialProject?.defaultBranch ?? initialProject?.branches[0]?.id ?? "main";
   });
+  const [launchTarget, setLaunchTarget] = useState<LaunchTarget>({ kind: "chat" });
+  const [terminalProfiles, setTerminalProfiles] = useState<TerminalProfile[]>(DEFAULT_TERMINAL_PROFILES);
+  const launchTerminal = useRpc(terminalLaunchRpc);
+  const invokeOpenAgent = useRpc(openAgentRpc);
+
+  useEffect(() => {
+    let cancelled = false;
+    void paseo.config.get().then(({ config }: { config: { terminalProfiles?: Array<{ id: string; name: string; command: string; args?: string[]; icon?: string }> } }) => {
+      if (cancelled || !Array.isArray(config.terminalProfiles)) return;
+      setTerminalProfiles(
+        config.terminalProfiles.map((profile) => ({
+          id: profile.id,
+          name: profile.name,
+          command: profile.command,
+          args: profile.args ?? [],
+          icon: profile.icon,
+        })),
+      );
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [paseo]);
 
   const selectedProject = useMemo(
     () =>
@@ -167,6 +199,11 @@ export function WorkspaceCreatorPanel({
         paseo,
         snapshot,
         selection,
+        launchTarget,
+        terminalProfiles,
+        launchTerminal,
+        openAgent: (agentId) => invokeOpenAgent({ agentId, serverId: hostId }),
+        serverId: hostId,
         setSelection,
         setPending,
         setError,
@@ -175,7 +212,7 @@ export function WorkspaceCreatorPanel({
           onClose();
         },
       }),
-    [baseBranch, isolation, onClose, onCreate, paseo, selectedProject, selection, snapshot],
+    [baseBranch, hostId, invokeOpenAgent, isolation, launchTarget, launchTerminal, onClose, onCreate, paseo, selectedProject, selection, snapshot, terminalProfiles],
   );
   const runtime = useLocalRuntime(chatModel);
 
@@ -199,6 +236,8 @@ export function WorkspaceCreatorPanel({
         providerLoading={providerLoading}
         snapshot={snapshot}
         selection={selection}
+        launchTarget={launchTarget}
+        terminalProfiles={terminalProfiles}
         openMenu={openMenu}
         onClose={close}
         onToggleMenu={setOpenMenu}
@@ -209,6 +248,10 @@ export function WorkspaceCreatorPanel({
         onSelectModel={selectModel}
         onSelectMode={selectMode}
         onSelectThinking={selectThinking}
+        onSelectLaunchTarget={(target) => {
+          setLaunchTarget(target);
+          setOpenMenu(null);
+        }}
         theme={theme}
       />
     </AssistantRuntimeProvider>

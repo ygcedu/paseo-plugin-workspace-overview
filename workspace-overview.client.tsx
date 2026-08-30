@@ -369,6 +369,7 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
             projectDisplayName={createDialog.projectDisplayName}
             projectDirectory={createDialog.projectDirectory}
             hostLabel={host.label}
+            hostId={host.id}
             projects={createProjectOptions}
             paseo={paseo}
             onClose={() => setCreateDialog(null)}

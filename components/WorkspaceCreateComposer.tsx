@@ -7,9 +7,11 @@ import { ModelBrowserMenu } from "./ModelBrowserMenu";
 import { Badge } from "./WorkspaceBadge";
 import { Menu } from "./WorkspaceMenu";
 import { SelectControl } from "./WorkspaceSelectControl";
-import { defaultModel, formatControlValue, providerById, readyProviders, selectableModels, type ComposerSelection, type Isolation, type MenuOption, type OpenMenu, type ProviderSnapshot, type WorkspaceProjectOption } from "./workspace-creator-shared";
+import { defaultModel, formatControlValue, providerById, readyProviders, selectableModels, type ComposerSelection, type Isolation, type LaunchTarget, type MenuOption, type OpenMenu, type ProviderSnapshot, type TerminalProfile, type WorkspaceProjectOption } from "./workspace-creator-shared";
 import { createComposerStyles } from "./workspace-creator-styles";
 import { ProjectIcon } from "./ProjectIcon";
+import { ProviderBrandIcon } from "./ProviderBrandIcon";
+import { WorkspaceLaunchMenu } from "./WorkspaceLaunchMenu";
 
 export function WorkspaceCreateComposer({
   project,
@@ -22,6 +24,8 @@ export function WorkspaceCreateComposer({
   providerLoading,
   snapshot,
   selection,
+  launchTarget,
+  terminalProfiles,
   openMenu,
   onClose,
   onToggleMenu,
@@ -32,6 +36,7 @@ export function WorkspaceCreateComposer({
   onSelectModel,
   onSelectMode,
   onSelectThinking,
+  onSelectLaunchTarget,
   theme,
 }: {
   project: WorkspaceProjectOption | null;
@@ -44,6 +49,8 @@ export function WorkspaceCreateComposer({
   providerLoading: boolean;
   snapshot: ProviderSnapshot | null;
   selection: ComposerSelection | null;
+  launchTarget: LaunchTarget;
+  terminalProfiles: TerminalProfile[];
   openMenu: OpenMenu;
   onClose: () => void;
   onToggleMenu: (menu: OpenMenu) => void;
@@ -54,6 +61,7 @@ export function WorkspaceCreateComposer({
   onSelectModel: (modelId: string) => void;
   onSelectMode: (modeId: string) => void;
   onSelectThinking: (thinkingId: string) => void;
+  onSelectLaunchTarget: (target: LaunchTarget) => void;
   theme: PluginSurfaceProps["theme"];
 }) {
   const styles = useMemo(() => createComposerStyles(theme), [theme]);
@@ -104,6 +112,12 @@ export function WorkspaceCreateComposer({
   const selectedMode = modes.find((item) => item.id === selection?.modeId) ?? null;
   const model = models.find((item) => item.id === selection?.modelId) ?? defaultModel(provider);
   const thinkingOptions = model?.thinkingOptions ?? [];
+  const selectedTerminalProfile = launchTarget.kind === "terminal"
+    ? terminalProfiles.find((profile) => profile.id === launchTarget.profileId) ?? null
+    : null;
+  const launchLabel = launchTarget.kind === "chat"
+    ? "Chat"
+    : selectedTerminalProfile ? `Terminal ${selectedTerminalProfile.name}` : "Terminal";
 
   const providerOptions = providers.map((entry) => ({
     id: entry.provider,
@@ -148,7 +162,6 @@ export function WorkspaceCreateComposer({
     detail: branch.detail,
     iconName: "GitBranch",
   }));
-  const launchOptions: MenuOption[] = [{ id: "chat", label: "Chat", detail: "Create a chat workspace", iconName: "MessageCircle" }];
   const hostOptions: MenuOption[] = [{ id: "current", label: hostLabel, iconName: "Server" }];
   const topMenuOpen = openMenu === "project" || openMenu === "host" || openMenu === "isolation" || openMenu === "base" || openMenu === "launch";
   const composerMenuOpen =
@@ -178,7 +191,7 @@ export function WorkspaceCreateComposer({
               theme={theme}
             />
             {openMenu === "project" ? (
-              <Menu kind="project" placement="below" options={projectOptions} selectedId={project.projectId} onSelect={onSelectProject} theme={theme} />
+              <Menu kind="project" placement="above" options={projectOptions} selectedId={project.projectId} onSelect={onSelectProject} theme={theme} />
             ) : null}
           </View>
           <View nativeID="workspace-create-dropdown-host" style={[styles.controlAnchor, openMenu === "host" && styles.controlAnchorOpen]}>
@@ -191,7 +204,7 @@ export function WorkspaceCreateComposer({
               theme={theme}
             />
             {openMenu === "host" ? (
-              <Menu kind="host" placement="below" options={hostOptions} selectedId="current" onSelect={() => onToggleMenu(null)} theme={theme} />
+              <Menu kind="host" placement="above" options={hostOptions} selectedId="current" onSelect={() => onToggleMenu(null)} theme={theme} />
             ) : null}
           </View>
           <View nativeID="workspace-create-dropdown-isolation" style={[styles.controlAnchor, openMenu === "isolation" && styles.controlAnchorOpen]}>
@@ -204,7 +217,7 @@ export function WorkspaceCreateComposer({
               theme={theme}
             />
             {openMenu === "isolation" ? (
-              <Menu kind="isolation" placement="below" options={isolationOptions} selectedId={isolation} onSelect={(id) => onSelectIsolation(id === "local" ? "local" : "worktree")} theme={theme} />
+              <Menu kind="isolation" placement="above" options={isolationOptions} selectedId={isolation} onSelect={(id) => onSelectIsolation(id === "local" ? "local" : "worktree")} theme={theme} />
             ) : null}
           </View>
           <View nativeID="workspace-create-dropdown-base" style={[styles.controlAnchor, openMenu === "base" && styles.controlAnchorOpen]}>
@@ -217,21 +230,25 @@ export function WorkspaceCreateComposer({
               theme={theme}
             />
             {openMenu === "base" ? (
-              <Menu kind="base" placement="below" options={baseOptions} selectedId={baseBranch} onSelect={onSelectBase} theme={theme} />
+              <Menu kind="base" placement="above" options={baseOptions} selectedId={baseBranch} onSelect={onSelectBase} theme={theme} />
             ) : null}
           </View>
           <View style={styles.launchSpacer} />
           <View nativeID="workspace-create-dropdown-launch" style={[styles.controlAnchor, openMenu === "launch" && styles.controlAnchorOpen]}>
             <Badge
-              icon={<Icon name="MessageCircle" color={theme.colors.foregroundMuted} size={16} />}
-              label="Chat"
+              icon={launchTarget.kind === "chat"
+                ? <Icon name="MessageCircle" color={theme.colors.foregroundMuted} size={16} />
+                : selectedTerminalProfile
+                  ? <ProviderBrandIcon providerId={selectedTerminalProfile.icon ?? selectedTerminalProfile.id} color={theme.colors.foregroundMuted} size={16} />
+                  : <Icon name="SquareTerminal" color={theme.colors.foregroundMuted} size={16} />}
+              label={launchLabel}
               selectable
               disabled={pending}
               onPress={() => onToggleMenu(openMenu === "launch" ? null : "launch")}
               theme={theme}
             />
             {openMenu === "launch" ? (
-              <Menu kind="launch" placement="below" options={launchOptions} selectedId="chat" onSelect={() => onToggleMenu(null)} theme={theme} />
+              <WorkspaceLaunchMenu target={launchTarget} profiles={terminalProfiles} onSelect={onSelectLaunchTarget} theme={theme} />
             ) : null}
           </View>
         </View>
@@ -240,7 +257,7 @@ export function WorkspaceCreateComposer({
           <ComposerPrimitive.Input
             nativeID="workspace-create-prompt"
             style={styles.textInput}
-            placeholder="给 Agent 发消息，标记 @files，或使用 /commands 和 /skills"
+            placeholder={launchTarget.kind === "chat" ? "给 Agent 发消息，标记 @files，或使用 /commands 和 /skills" : selectedTerminalProfile ? "输入启动提示词" : "输入终端命令"}
             placeholderTextColor={theme.colors.foregroundMuted + "66"}
             multiline
             autoFocus
@@ -248,7 +265,7 @@ export function WorkspaceCreateComposer({
           />
 
           <View style={styles.buttonRow}>
-            <View style={styles.leftControls}>
+            {launchTarget.kind === "chat" ? <View style={styles.leftControls}>
               <View nativeID="workspace-create-dropdown-model" style={[styles.controlAnchor, openMenu === "model" && styles.controlAnchorOpen]}>
                 <SelectControl kind="model" providerId={selection?.providerId} value={formatControlValue(selection?.modelLabel ?? null, "Model")} disabled={pending || providerLoading || modelOptions.length <= 1} open={openMenu === "model"} onPress={() => onToggleMenu(openMenu === "model" ? null : "model")} theme={theme} />
                 {openMenu === "model" ? <ModelBrowserMenu providers={providers} selection={selection} onSelect={onSelectModel} theme={theme} /> : null}
@@ -265,7 +282,7 @@ export function WorkspaceCreateComposer({
                   {openMenu === "mode" ? <Menu kind="mode" options={modeOptions} selectedId={selection?.modeId ?? null} onSelect={onSelectMode} theme={theme} /> : null}
                 </View>
               ) : null}
-            </View>
+            </View> : <View style={styles.leftControls} />}
 
             <View style={styles.rightControls}>
               {pending ? <Text style={styles.pendingText}>Sending</Text> : null}

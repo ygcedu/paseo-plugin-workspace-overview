@@ -5,6 +5,15 @@ import type { PluginSurfaceProps } from "@getpaseo/plugin";
 export type PaseoClient = ReturnType<typeof import("@getpaseo/plugin").usePaseo>;
 export type OpenMenu = "project" | "host" | "isolation" | "base" | "launch" | "provider" | "model" | "mode" | "thinking" | null;
 export type Isolation = "local" | "worktree";
+export type LaunchTarget = { kind: "chat" } | { kind: "terminal"; profileId: string };
+
+export interface TerminalProfile {
+  id: string;
+  name: string;
+  command: string;
+  args: string[];
+  icon?: string;
+}
 
 export interface GitBranchOption {
   id: string;
@@ -71,6 +80,7 @@ export interface WorkspaceCreatorPanelProps {
   projectDisplayName: string;
   projectDirectory: string | undefined;
   hostLabel: string;
+  hostId: string;
   projects: WorkspaceProjectOption[];
   paseo: PaseoClient;
   onClose: () => void;
@@ -240,6 +250,17 @@ export function createWorkspaceChatModel(input: {
   paseo: PaseoClient;
   snapshot: ProviderSnapshot | null;
   selection: ComposerSelection | null;
+  launchTarget: LaunchTarget;
+  terminalProfiles: TerminalProfile[];
+  launchTerminal: (input: {
+    workspaceDirectory: string;
+    workspaceId: string;
+    serverId: string;
+    prompt: string;
+    profile: { name: string; command: string; args: string[] } | null;
+  }) => Promise<{ terminalId: string }>;
+  openAgent: (agentId: string) => Promise<unknown>;
+  serverId: string;
   setSelection: (selection: ComposerSelection) => void;
   setPending: (pending: boolean) => void;
   setError: (error: string | null) => void;
@@ -256,6 +277,49 @@ export function createWorkspaceChatModel(input: {
       input.setError(null);
 
       try {
+        if (input.launchTarget.kind === "terminal") {
+          const workspace = await input.paseo.workspaces.create({
+            source:
+              input.isolation === "worktree"
+                ? {
+                    kind: "worktree",
+                    cwd: input.project.projectDirectory,
+                    projectId: input.project.projectId,
+                    worktreeSlug: createWorktreeSlug(),
+                    action: "branch-off",
+                    baseBranch: input.baseBranch,
+                  }
+                : {
+                    kind: "directory",
+                    path: input.project.projectDirectory,
+                    projectId: input.project.projectId,
+                  },
+          });
+          const current = workspace.current() ?? (await workspace.refresh());
+          const workspaceDirectory = current?.workspaceDirectory ?? workspace.directory;
+          if (!workspaceDirectory) throw new Error("创建的 Workspace 没有可用目录");
+          const profileId = input.launchTarget.profileId;
+          const profile =
+            profileId === "blank"
+              ? null
+              : input.terminalProfiles.find((item) => item.id === profileId) ?? null;
+          const { terminalId } = await input.launchTerminal({
+            workspaceDirectory,
+            workspaceId: workspace.id,
+            serverId: input.serverId,
+            prompt,
+            profile: profile
+              ? { name: profile.name, command: profile.command, args: profile.args }
+              : null,
+          });
+          if (typeof globalThis.location !== "undefined") {
+            const route = `paseo://app/h/${encodeURIComponent(input.serverId)}/workspace/${encodeURIComponent(workspace.id)}?open=${encodeURIComponent(`terminal:${terminalId}`)}`;
+            globalThis.location.assign(route);
+          }
+          input.onDone();
+          return { content: [] };
+        }
+
         const selection = await ensureSelection({
           paseo: input.paseo,
           projectDirectory: input.project.projectDirectory,
@@ -283,7 +347,7 @@ export function createWorkspaceChatModel(input: {
           firstAgentContext: { prompt },
         });
 
-        await workspace.agents.create({
+        const agent = await workspace.agents.create({
           config: {
             provider: providerModelId(selection),
             ...(selection.modeId ? { modeId: selection.modeId } : {}),
@@ -293,6 +357,8 @@ export function createWorkspaceChatModel(input: {
           },
           prompt,
         });
+
+        await input.openAgent(agent.id);
 
         input.onDone();
         return { content: [] };
