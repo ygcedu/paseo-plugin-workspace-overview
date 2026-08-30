@@ -47,6 +47,10 @@ function timelineMessages(entries: AgentTimelineEntry[]): ThreadMessageLike[] {
   return messages;
 }
 
+const PANEL_MIN_WIDTH = 320;
+const PANEL_MAX_WIDTH = 720;
+const PANEL_DEFAULT_WIDTH = 420;
+
 export function AgentConversationPreview({
   agent,
   paseo,
@@ -60,6 +64,13 @@ export function AgentConversationPreview({
   onClose: () => void;
   onOpenFull: () => void;
 }) {
+  const [panelWidth, setPanelWidth] = useState(PANEL_DEFAULT_WIDTH);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const panelWidthRef = useRef(PANEL_DEFAULT_WIDTH);
+  const dragStartWidthRef = useRef(PANEL_DEFAULT_WIDTH);
+  const panelRef = useRef<View | null>(null);
+  const dragStateRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const handle = useMemo(() => paseo.agents.ref(agent.id), [agent.id, paseo]);
   const [entries, setEntries] = useState<AgentTimelineEntry[]>([]);
   const [messages, setMessages] = useState<ThreadMessageLike[]>([]);
@@ -108,8 +119,56 @@ export function AgentConversationPreview({
     runtime.thread.reset(messages);
   }, [messages, runtime]);
 
+  const onPointerDown = useCallback((e: unknown) => {
+    const ev = e as { clientX: number; pointerId: number; target: Element; preventDefault: () => void; stopPropagation: () => void };
+    ev.preventDefault();
+    ev.stopPropagation();
+    dragStateRef.current = { startX: ev.clientX, startWidth: panelWidthRef.current };
+    setIsDragging(true);
+    if (typeof window !== "undefined") {
+      document.body.style.cursor = "ew-resize";
+    }
+    const target = ev.target as Element & { setPointerCapture?: (id: number) => void };
+    if (typeof target.setPointerCapture === "function") {
+      target.setPointerCapture(ev.pointerId);
+    }
+
+    const onMove = (moveEv: PointerEvent) => {
+      const drag = dragStateRef.current;
+      if (!drag) return;
+      const delta = drag.startX - moveEv.clientX;
+      const newWidth = Math.max(PANEL_MIN_WIDTH, Math.min(PANEL_MAX_WIDTH, drag.startWidth + delta));
+      panelWidthRef.current = newWidth;
+      // Direct DOM update for smooth 60fps without React re-render
+      const el = panelRef.current as unknown as HTMLElement | null;
+      if (el) {
+        el.style.width = `${newWidth}px`;
+      }
+    };
+
+    const onUp = () => {
+      dragStateRef.current = null;
+      setIsDragging(false);
+      setPanelWidth(panelWidthRef.current);
+      if (typeof window !== "undefined") {
+        document.body.style.cursor = "";
+      }
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  }, []);
+
+  const gripActive = isDragging || isHovered;
+  const gripColor = isDragging ? theme.colors.accent : isHovered ? theme.colors.foregroundMuted : theme.colors.foregroundMuted + "55";
+  const gripBg = gripActive ? theme.colors.foregroundMuted + "15" : "transparent";
+
   const styles = useMemo(() => ({
-    panel: { width: 420, minWidth: 340, height: "100%", borderLeftWidth: 1, borderLeftColor: theme.colors.foregroundMuted + "22", backgroundColor: theme.colors.surface0 } as ViewStyle,
+    panel: { width: panelWidth, height: "100%", borderLeftWidth: 1, borderLeftColor: theme.colors.foregroundMuted + "22", backgroundColor: theme.colors.surface0 } as ViewStyle,
     header: { height: 54, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 8, borderBottomWidth: 1, borderBottomColor: theme.colors.foregroundMuted + "22" } as ViewStyle,
     title: { flex: 1, color: theme.colors.foreground, fontSize: 14, fontWeight: "600" } as TextStyle,
     subtitle: { color: theme.colors.foregroundMuted, fontSize: 11 } as TextStyle,
@@ -117,11 +176,21 @@ export function AgentConversationPreview({
     composer: { margin: 12, borderWidth: 1, borderColor: theme.colors.foregroundMuted + "33", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, flexDirection: "row", alignItems: "flex-end", gap: 8 } as ViewStyle,
     input: { flex: 1, minHeight: 36, maxHeight: 120, color: theme.colors.foreground, fontSize: 13, borderWidth: 0 } as TextStyle,
     send: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.accent } as ViewStyle,
-  }), [theme]);
+    resizeHandle: { position: "absolute" as const, left: -8, top: 0, bottom: 0, width: 16, justifyContent: "center" as const, alignItems: "center" as const, zIndex: 10, cursor: "ew-resize" } as unknown as ViewStyle,
+    gripDots: { width: 3, height: 22, borderRadius: 1.5, backgroundColor: gripColor } as ViewStyle,
+  }), [theme, panelWidth, gripColor]);
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <View style={styles.panel}>
+      <View ref={panelRef} style={styles.panel}>
+        <View
+          style={[styles.resizeHandle, { backgroundColor: gripBg } as ViewStyle]}
+          onPointerDown={onPointerDown}
+          onPointerEnter={() => setIsHovered(true) as void}
+          onPointerLeave={() => setIsHovered(false) as void}
+        >
+          <View style={styles.gripDots} />
+        </View>
         <View style={styles.header}>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.title} numberOfLines={1}>{agent.title ?? agent.id.slice(0, 8)}</Text>
