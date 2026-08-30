@@ -84,6 +84,14 @@ export function WorkspaceCreateComposer({
         border: 0 !important;
         box-shadow: none !important;
       }
+      [id^="workspace-create-menu-search-"]:focus,
+      [id^="workspace-create-menu-search-"]:focus-visible,
+      #workspace-create-model-search:focus,
+      #workspace-create-model-search:focus-visible {
+        outline: none !important;
+        border: 0 !important;
+        box-shadow: none !important;
+      }
     `;
     document.head.appendChild(style);
     return () => style.remove();

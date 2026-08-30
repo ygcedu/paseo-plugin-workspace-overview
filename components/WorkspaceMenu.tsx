@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo } from "react";
-import { Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
+import React, { useMemo, useState } from "react";
+import { Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from "react-native";
 import type { PluginSurfaceProps } from "@getpaseo/plugin";
 import { Icon } from "@getpaseo/plugin/react-native";
 import { MAX_MENU_HEIGHT, MENU_WIDTH_BY_KIND, opaqueSurfaceColor, type MenuOption, type OpenMenu } from "./workspace-creator-shared";
@@ -22,9 +22,21 @@ export function Menu({
   theme: PluginSurfaceProps["theme"];
 }) {
   const styles = useMemo(() => createMenuStyles(theme), [theme]);
+  const [searchQuery, setSearchQuery] = useState("");
   const window = useWindowDimensions();
   const menuBackground = opaqueSurfaceColor(theme.colors.surface0, theme.colors.foreground);
-  if (options.length === 0) return null;
+  const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
+  const filteredOptions = useMemo(
+    () =>
+      normalizedQuery
+        ? options.filter((option) =>
+            [option.label, option.detail, option.id].some((value) =>
+              value?.toLocaleLowerCase().includes(normalizedQuery),
+            ),
+          )
+        : options,
+    [normalizedQuery, options],
+  );
   const menuWidth = Math.min(MENU_WIDTH_BY_KIND[kind], Math.max(180, window.width - 80));
   const menuHeight = Math.min(
     placement === "below" ? 160 : MAX_MENU_HEIGHT,
@@ -39,11 +51,30 @@ export function Menu({
         { width: menuWidth, maxHeight: menuHeight },
       ]}
     >
+      <View style={styles.menuSearchRow}>
+        <Icon name="Search" color={theme.colors.foregroundMuted} size={15} />
+        <TextInput
+          nativeID={`workspace-create-menu-search-${kind}`}
+          autoFocus
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="搜索"
+          placeholderTextColor={theme.colors.foregroundMuted}
+          selectionColor={theme.colors.accent}
+          style={styles.menuSearchInput}
+        />
+        {searchQuery ? (
+          <Pressable accessibilityLabel="清除搜索" onPress={() => setSearchQuery("")}>
+            <Icon name="X" color={theme.colors.foregroundMuted} size={14} />
+          </Pressable>
+        ) : null}
+      </View>
+      <View style={styles.modelBrowserSeparator} />
       <ScrollView
         style={[styles.menuScroll, { maxHeight: menuHeight - 12 }]}
         contentContainerStyle={{ backgroundColor: menuBackground }}
       >
-        {options.map((option) => {
+        {filteredOptions.map((option) => {
           const selected = option.id === selectedId;
           return (
             <Pressable
@@ -76,6 +107,7 @@ export function Menu({
             </Pressable>
           );
         })}
+        {filteredOptions.length === 0 ? <Text style={styles.menuEmptyText}>没有匹配结果</Text> : null}
       </ScrollView>
     </View>
   );
