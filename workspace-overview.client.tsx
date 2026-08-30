@@ -8,9 +8,11 @@ import { ProjectCard } from "./components/ProjectCard";
 import { WorkspaceCreatorPanel } from "./components/WorkspaceCreatorPanel";
 import { useWorkspaces } from "./hooks/useWorkspaces";
 import { useFilter, TIME_RANGES, type TimeRange } from "./hooks/useFilter";
-import { type TooltipState, type WorkspaceEntry } from "./overview.types";
+import { type AgentEntry, type TooltipState, type WorkspaceEntry } from "./overview.types";
 import { projectIconRpc } from "./shared/project-icon";
 import { gitBranchesRpc } from "./shared/git-branches";
+import { AgentConversationPreview } from "./components/AgentConversationPreview";
+import { useOpenAgent } from "./hooks/useOpenAgent";
 
 function resolveProjectSourceDirectory(workspaces: WorkspaceEntry[]): string | undefined {
   return (
@@ -39,6 +41,7 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const [surfaceSize, setSurfaceSize] = useState({ width: 0, height: 0 });
   const [timeRange, setTimeRange] = useState<TimeRange>("24h");
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [createDialog, setCreateDialog] = useState<{
     projectId: string;
     projectDisplayName: string;
@@ -48,12 +51,24 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
   const surfaceOrigin = useRef({ x: 0, y: 0 });
 
   const paseo = usePaseo();
+  const { openAgent } = useOpenAgent(host.id);
   const { projects, agentsByWorkspace, isLoading, error, refetch } = useWorkspaces(host.id);
 
   const { filteredProjects, filteredAgentsByWorkspace, autoExpand } = useFilter(
     projects,
     agentsByWorkspace,
     timeRange,
+  );
+  const selectedAgent = useMemo(
+    () => {
+      if (!selectedAgentId) return null;
+      for (const agents of agentsByWorkspace.values()) {
+        const agent = agents.find((candidate: AgentEntry) => candidate.id === selectedAgentId);
+        if (agent) return agent;
+      }
+      return null;
+    },
+    [agentsByWorkspace, selectedAgentId],
   );
 
   const createProjectOptionsWithoutIcons = useMemo(
@@ -289,6 +304,8 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
           </Text>
         </View>
 
+        <View style={{ flex: 1, minHeight: 0, flexDirection: "row" }}>
+        <View style={{ flex: 1, minWidth: 0 }}>
         {filteredProjects.length === 0 ? (
           <View style={{ flex: 1, alignItems: "center" as const, justifyContent: "center" as const, padding: 24 }}>
             <Text style={{ color: theme.colors.foregroundMuted, textAlign: "center" as const }}>
@@ -329,6 +346,7 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
                       width={cardWidth}
                       hostLabel={host.label}
                       hostId={host.id}
+                      onSelectAgent={(agent) => setSelectedAgentId(agent.id)}
                       onCreateWorktree={
                         projectDirectory
                           ? () =>
@@ -349,6 +367,18 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
             </View>
           </ScrollView>
         )}
+        </View>
+        {selectedAgent ? (
+          <AgentConversationPreview
+            key={selectedAgent.id}
+            agent={selectedAgent}
+            paseo={paseo}
+            theme={theme}
+            onClose={() => setSelectedAgentId(null)}
+            onOpenFull={() => void openAgent(selectedAgent.id)}
+          />
+        ) : null}
+        </View>
 
         {tooltip && tooltipPos && (
           <View style={[tooltipStyles.container, { left: tooltipPos.left, top: tooltipPos.top }]} pointerEvents="none">

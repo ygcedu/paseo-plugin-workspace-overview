@@ -76,5 +76,6 @@ export interface ProjectCardProps {
   width: number;
   hostLabel: string;
   hostId: string;
+  onSelectAgent: (agent: AgentEntry) => void;
   onCreateWorktree?: () => void;
 }

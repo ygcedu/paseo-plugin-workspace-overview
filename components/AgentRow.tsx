@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Easing, Text, TouchableOpacity, View, type ViewStyle, type TextStyle } from "react-native";
 import { type PluginSurfaceProps } from "@getpaseo/plugin";
-import { useOpenAgent } from "../hooks/useOpenAgent";
 import { type AgentEntry } from "../overview.types";
 import { BadgeWithTooltip } from "./Tooltip";
 import { statusColor, statusRowBackground } from "./Tooltip";
@@ -27,7 +26,7 @@ function formatRelativeTime(iso: string | null | undefined): string {
   return `${year}y ago`;
 }
 
-export function AgentRow({ agent, theme, compact, hostId }: { agent: AgentEntry; theme: PluginSurfaceProps["theme"]; compact: boolean; hostId: string }) {
+export function AgentRow({ agent, theme, compact, onSelect }: { agent: AgentEntry; theme: PluginSurfaceProps["theme"]; compact: boolean; onSelect: () => void }) {
   const activityAt = agent.lastUserMessageAt ?? agent.updatedAt;
   const activityLabel = formatRelativeTime(activityAt);
   const activityTooltip = activityAt ? new Date(activityAt).toLocaleString() : "";
@@ -71,12 +70,6 @@ export function AgentRow({ agent, theme, compact, hostId }: { agent: AgentEntry;
     [theme, compact, rowBg],
   );
 
-  const { openAgent } = useOpenAgent(hostId);
-
-  const handlePress = useCallback(() => {
-    void openAgent(agent.id);
-  }, [openAgent, agent.id]);
-
   const handleLongPress = useCallback(() => {
     const didCopy = typeof navigator !== "undefined" && (navigator as { clipboard?: { writeText(t: string): Promise<void> } }).clipboard;
     if (didCopy) {
@@ -86,7 +79,7 @@ export function AgentRow({ agent, theme, compact, hostId }: { agent: AgentEntry;
   }, [agent.id]);
 
   return (
-    <TouchableOpacity onPress={handlePress} onLongPress={handleLongPress} activeOpacity={0.7}>
+    <TouchableOpacity onPress={onSelect} onLongPress={handleLongPress} activeOpacity={0.7}>
       <View style={styles.row}>
         <Text style={styles.title} numberOfLines={1}>
           {agent.title ?? agent.id.slice(0, 8)}

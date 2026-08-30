@@ -33,6 +33,7 @@ export function ProjectCard({
   hostLabel,
   hostId,
   onCreateWorktree,
+  onSelectAgent,
 }: ProjectCardProps) {
   // Card-level expand: explicit user toggle wins; otherwise auto-expand when
   // any branch contains a running/errored/attention agent.
@@ -174,7 +175,7 @@ export function ProjectCard({
               />
               {isExpanded &&
                 wsAgents.map((agent) => (
-                  <AgentRow key={agent.id} agent={agent} theme={theme} compact={compact} hostId={hostId} />
+                  <AgentRow key={agent.id} agent={agent} theme={theme} compact={compact} onSelect={() => onSelectAgent(agent)} />
                 ))}
               {isExpanded && wsAgents.length === 0 && (
                 <View style={{ paddingLeft: 32, paddingRight: 12, paddingVertical: 6 }}>
