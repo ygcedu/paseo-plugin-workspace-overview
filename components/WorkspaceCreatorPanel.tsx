@@ -18,6 +18,7 @@ import {
 } from "@assistant-ui/react-native";
 import type { PluginSurfaceProps } from "@getpaseo/plugin";
 import { Icon } from "@getpaseo/plugin/react-native";
+import { ProviderBrandIcon } from "./ProviderBrandIcon";
 
 type PaseoClient = ReturnType<typeof import("@getpaseo/plugin").usePaseo>;
 type OpenMenu = "project" | "host" | "isolation" | "base" | "launch" | "provider" | "model" | "mode" | "thinking" | null;
@@ -70,7 +71,12 @@ interface ComposerSelection {
   thinkingLabel: string | null;
 }
 
-interface WorkspaceCreateDialogProps {
+interface PaseoProviderModelPreference {
+  providerId: string;
+  modelId: string | null;
+}
+
+interface WorkspaceCreatorPanelProps {
   projectId: string;
   projectDisplayName: string;
   projectDirectory: string | undefined;
@@ -89,6 +95,7 @@ interface MenuOption {
 }
 
 const WORKTREE_SLUG_PREFIX = "workspace";
+const PASEO_CREATE_AGENT_PREFERENCES_KEY = "@paseo:create-agent-preferences";
 const PROVIDER_READY_TIMEOUT_MS = 10000;
 const MAX_MENU_HEIGHT = 260;
 const MENU_WIDTH_BY_KIND: Record<Exclude<OpenMenu, null>, number> = {
@@ -105,6 +112,26 @@ const MENU_WIDTH_BY_KIND: Record<Exclude<OpenMenu, null>, number> = {
 
 function createWorktreeSlug(): string {
   return `${WORKTREE_SLUG_PREFIX}-${Date.now().toString(36)}`;
+}
+
+function readPaseoProviderModelPreference(): PaseoProviderModelPreference | null {
+  if (typeof globalThis.localStorage === "undefined") return null;
+  try {
+    const raw = globalThis.localStorage.getItem(PASEO_CREATE_AGENT_PREFERENCES_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as {
+      provider?: unknown;
+      providerPreferences?: Record<string, { model?: unknown }>;
+    };
+    if (typeof parsed.provider !== "string" || !parsed.provider.trim()) return null;
+    const model = parsed.providerPreferences?.[parsed.provider]?.model;
+    return {
+      providerId: parsed.provider,
+      modelId: typeof model === "string" && model.trim() ? model : null,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function getSubmittedText(options: ChatModelRunOptions): string {
@@ -166,8 +193,22 @@ function buildSelection(entry: ProviderEntry, model = defaultModel(entry)): Comp
   };
 }
 
-function defaultSelection(snapshot: ProviderSnapshot): ComposerSelection | null {
+function defaultSelection(
+  snapshot: ProviderSnapshot,
+  preferred: PaseoProviderModelPreference | null = readPaseoProviderModelPreference(),
+): ComposerSelection | null {
   const entries = readyProviders(snapshot);
+  const preferredProviderId = preferred?.providerId ?? null;
+  const preferredModelId = preferred?.modelId ?? null;
+  const preferredEntry = preferredProviderId
+    ? entries.find((item) => item.provider === preferredProviderId) ?? null
+    : null;
+  if (preferredEntry) {
+    const preferredModel = preferredModelId
+      ? selectableModels(preferredEntry).find((model) => model.id === preferredModelId) ?? null
+      : null;
+    return buildSelection(preferredEntry, preferredModel ?? defaultModel(preferredEntry));
+  }
   const entry =
     entries.find((item) => item.provider === "codex") ??
     entries.find((item) => item.provider.toLowerCase().includes("codex")) ??
@@ -357,6 +398,7 @@ function SelectControl({
   onPress,
   theme,
   iconName,
+  providerId,
 }: {
   kind: Exclude<OpenMenu, null>;
   value: string;
@@ -365,6 +407,7 @@ function SelectControl({
   onPress: () => void;
   theme: PluginSurfaceProps["theme"];
   iconName?: string;
+  providerId?: string | null;
 }) {
   const styles = useMemo(() => createControlStyles(theme), [theme]);
   const iconColor = theme.colors.foregroundMuted;
@@ -374,7 +417,13 @@ function SelectControl({
       onPress={onPress}
       style={[styles.control, open && styles.controlOpen, disabled && styles.controlDisabled]}
     >
-      {kind === "provider" ? null : iconName ? <Icon name={iconName} color={iconColor} size={16} /> : <ControlGlyph kind={kind} color={iconColor} />}
+      {kind === "model" && providerId ? (
+        <ProviderBrandIcon providerId={providerId} color={iconColor} size={16} />
+      ) : kind === "provider" ? null : iconName ? (
+        <Icon name={iconName} color={iconColor} size={16} />
+      ) : (
+        <ControlGlyph kind={kind} color={iconColor} />
+      )}
       <Text style={styles.controlValue} numberOfLines={1}>
         {value}
       </Text>
@@ -449,14 +498,6 @@ function Menu({
   );
 }
 
-function providerIconName(providerId: string): string {
-  const normalized = providerId.toLowerCase();
-  if (normalized.includes("codex") || normalized.includes("openai")) return "Atom";
-  if (normalized.includes("claude") || normalized.includes("anthropic")) return "Sparkles";
-  if (normalized.includes("copilot") || normalized.includes("github")) return "Github";
-  return "Bot";
-}
-
 function ModelBrowserMenu({
   providers,
   selection,
@@ -480,7 +521,7 @@ function ModelBrowserMenu({
         <>
           <Pressable onPress={() => setProviderId(null)} style={[styles.modelBrowserHeader, { backgroundColor }]}>
             <Icon name="ChevronLeft" color={theme.colors.foregroundMuted} size={16} />
-            <Icon name={providerIconName(provider.provider)} color={theme.colors.foregroundMuted} size={16} />
+            <ProviderBrandIcon providerId={provider.provider} color={theme.colors.foregroundMuted} size={16} />
             <Text style={styles.modelBrowserTitle} numberOfLines={1}>{provider.label ?? provider.provider}</Text>
           </Pressable>
           <View style={styles.modelBrowserSeparator} />
@@ -517,7 +558,7 @@ function ModelBrowserMenu({
                 <View key={entry.provider}>
                   {index > 0 ? <View style={styles.modelBrowserSeparator} /> : null}
                   <Pressable onPress={() => setProviderId(entry.provider)} style={[styles.menuItem, styles.modelBrowserProviderRow, { backgroundColor }]}>
-                    <Icon name={providerIconName(entry.provider)} color={theme.colors.foregroundMuted} size={16} />
+                    <ProviderBrandIcon providerId={entry.provider} color={theme.colors.foregroundMuted} size={16} />
                     <Text style={[styles.menuLabel, styles.modelBrowserProviderLabel]} numberOfLines={1}>{entry.label ?? entry.provider}</Text>
                     <Text style={styles.modelBrowserCount}>{count} {count === 1 ? "model" : "models"}</Text>
                     <Icon name="ChevronRight" color={theme.colors.foregroundMuted} size={16} />
@@ -753,7 +794,7 @@ function WorkspaceCreateComposer({
           <View style={styles.buttonRow}>
             <View style={styles.leftControls}>
               <View nativeID="workspace-create-dropdown-model" style={[styles.controlAnchor, openMenu === "model" && styles.controlAnchorOpen]}>
-                <SelectControl kind="model" value={formatControlValue(selection?.modelLabel ?? null, "Model")} disabled={pending || providerLoading || modelOptions.length <= 1} open={openMenu === "model"} onPress={() => onToggleMenu(openMenu === "model" ? null : "model")} theme={theme} />
+                <SelectControl kind="model" providerId={selection?.providerId} value={formatControlValue(selection?.modelLabel ?? null, "Model")} disabled={pending || providerLoading || modelOptions.length <= 1} open={openMenu === "model"} onPress={() => onToggleMenu(openMenu === "model" ? null : "model")} theme={theme} />
                 {openMenu === "model" ? <ModelBrowserMenu providers={providers} selection={selection} onSelect={onSelectModel} theme={theme} /> : null}
               </View>
               {thinkingOptionsForMenu.length > 0 ? (
@@ -787,7 +828,7 @@ function WorkspaceCreateComposer({
   );
 }
 
-export function WorkspaceCreateDialog({
+export function WorkspaceCreatorPanel({
   projectId,
   projectDisplayName,
   projectDirectory,
@@ -797,7 +838,7 @@ export function WorkspaceCreateDialog({
   onClose,
   onCreate,
   theme,
-}: WorkspaceCreateDialogProps) {
+}: WorkspaceCreatorPanelProps) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [providerLoading, setProviderLoading] = useState(false);
@@ -829,7 +870,10 @@ export function WorkspaceCreateDialog({
       .then((nextSnapshot: ProviderSnapshot) => {
         if (cancelled) return;
         setSnapshot(nextSnapshot);
-        setSelection((current) => current ?? defaultSelection(nextSnapshot));
+        setSelection((current) => {
+          if (current) return current;
+          return defaultSelection(nextSnapshot, readPaseoProviderModelPreference());
+        });
       })
       .catch((loadError: unknown) => {
         if (cancelled) return;
@@ -992,11 +1036,8 @@ function createComposerStyles(theme: PluginSurfaceProps["theme"]) {
   const surface1 = "surface1" in colors ? colors.surface1 : colors.surface0;
   return StyleSheet.create({
     panel: {
-      position: "absolute",
-      left: 0,
-      right: 0,
-      bottom: 0,
-      zIndex: 1000,
+      flexShrink: 0,
+      overflow: "visible",
       backgroundColor: colors.surface0,
       paddingHorizontal: 24,
       paddingTop: 20,

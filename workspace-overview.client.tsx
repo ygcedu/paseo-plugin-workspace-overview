@@ -4,7 +4,7 @@ import { ScrollView, Text, TouchableOpacity, View, type LayoutChangeEvent, type 
 
 import { TooltipProvider, useTooltip } from "./components/Tooltip";
 import { ProjectCard } from "./components/ProjectCard";
-import { WorkspaceCreateDialog } from "./components/WorkspaceCreateDialog";
+import { WorkspaceCreatorPanel } from "./components/WorkspaceCreatorPanel";
 import { useWorkspaces } from "./hooks/useWorkspaces";
 import { useFilter, TIME_RANGES, type TimeRange } from "./hooks/useFilter";
 import { type TooltipState, type WorkspaceEntry } from "./overview.types";
@@ -193,6 +193,7 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
         style={{ flex: 1, backgroundColor: theme.colors.surface0 }}
         onLayout={measureSurface}
       >
+        <View style={{ flex: 1, minHeight: 0, position: "relative" }}>
         <View style={{ paddingHorizontal: horizontalPadding, paddingTop: 12, paddingBottom: 8 }}>
           <View style={{ flexDirection: "row" as const, alignItems: "center" as const, justifyContent: "space-between" as const }}>
             <Text style={{ color: theme.colors.foreground, fontSize: layout.compact ? 18 : 22, fontWeight: "700" as const }}>
@@ -246,6 +247,7 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
           </View>
         ) : (
           <ScrollView
+            style={{ flex: 1 }}
             contentContainerStyle={{ paddingHorizontal: horizontalPadding, paddingBottom: 24, paddingTop: 4 }}
           >
             <View
@@ -308,9 +310,11 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
             ))}
           </View>
         )}
+        </View>
 
         {createDialog && (
-          <WorkspaceCreateDialog
+          <WorkspaceCreatorPanel
+            key={createDialog.projectId}
             projectId={createDialog.projectId}
             projectDisplayName={createDialog.projectDisplayName}
             projectDirectory={createDialog.projectDirectory}
