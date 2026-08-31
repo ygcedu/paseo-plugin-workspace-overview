@@ -66,6 +66,9 @@ export function AgentConversationPreview({
   const [messages, setMessages] = useState<ThreadMessageLike[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [hasInput, setHasInput] = useState(false);
+  const [liveStatus, setLiveStatus] = useState(agent.status);
   const loadingRef = useRef(false);
 
   const refresh = useCallback(async () => {
@@ -76,6 +79,12 @@ export function AgentConversationPreview({
       setEntries(page.entries);
       setMessages(timelineMessages(page.entries));
       setError(page.error);
+      const snapshot = (page as { agent?: { status?: string } | null }).agent;
+      if (snapshot?.status) {
+        setLiveStatus(snapshot.status as typeof liveStatus);
+      } else if (handle.status) {
+        setLiveStatus(handle.status);
+      }
     } catch (refreshError) {
       setError(refreshError instanceof Error ? refreshError.message : String(refreshError));
     } finally {
@@ -83,6 +92,40 @@ export function AgentConversationPreview({
       setLoading(false);
     }
   }, [handle]);
+
+  const isAgentRunning = liveStatus === "running";
+
+  const handleCancel = useCallback(async () => {
+    if (isCancelling) return;
+    setIsCancelling(true);
+    try {
+      const client = paseo as unknown as { cancelAgent: (agentId: string) => Promise<void> };
+      if (typeof client.cancelAgent === "function") {
+        await client.cancelAgent(agent.id);
+      }
+      setTimeout(() => void refresh(), 250);
+    } catch (cancelError) {
+      setError(cancelError instanceof Error ? cancelError.message : String(cancelError));
+    } finally {
+      setIsCancelling(false);
+    }
+  }, [paseo, agent.id, isCancelling, refresh]);
+
+  // Track live agent status via handle subscription + polling
+  useEffect(() => {
+    setLiveStatus(agent.status);
+    const updateStatus = () => {
+      const current = handle.current();
+      if (current?.status) setLiveStatus(current.status);
+    };
+    updateStatus();
+    const unsubscribe = handle.subscribe((update: Record<string, unknown>) => {
+      const status = (update as { status?: string }).status;
+      if (status) setLiveStatus(status as typeof liveStatus);
+    });
+    const timer = setInterval(updateStatus, 2000);
+    return () => { unsubscribe(); clearInterval(timer); };
+  }, [agent.id, agent.status, handle]);
 
   useEffect(() => {
     setMessages([]);
@@ -98,7 +141,9 @@ export function AgentConversationPreview({
     async run(options) {
       const text = submittedText(options);
       if (!text) return { content: [] };
+      setHasInput(false);
       await handle.send(text);
+      setLiveStatus("running");
       setTimeout(() => void refresh(), 250);
       return { content: [] };
     },
@@ -118,6 +163,7 @@ export function AgentConversationPreview({
     composer: { margin: 12, borderWidth: 1, borderColor: theme.colors.foregroundMuted + "33", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, flexDirection: "row", alignItems: "flex-end", gap: 8 } as ViewStyle,
     input: { flex: 1, minHeight: 36, maxHeight: 120, color: theme.colors.foreground, fontSize: 13, borderWidth: 0 } as TextStyle,
     send: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.accent } as ViewStyle,
+    stop: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.statusDanger } as ViewStyle,
   }), [theme]);
 
   return (
@@ -134,7 +180,7 @@ export function AgentConversationPreview({
         <View style={styles.header}>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.title} numberOfLines={1}>{agent.title ?? agent.id.slice(0, 8)}</Text>
-            <Text style={styles.subtitle}>{agent.provider}{agent.model ? ` · ${agent.model}` : ""} · {agent.status}</Text>
+            <Text style={styles.subtitle}>{agent.provider}{agent.model ? ` · ${agent.model}` : ""} · {liveStatus}</Text>
           </View>
           <Pressable accessibilityLabel="打开完整会话" onPress={onOpenFull} style={styles.iconButton}><Icon name="ExternalLink" color={theme.colors.foregroundMuted} size={16} /></Pressable>
           <Pressable accessibilityLabel="关闭会话预览" onPress={onClose} style={styles.iconButton}><Icon name="X" color={theme.colors.foregroundMuted} size={16} /></Pressable>
@@ -144,8 +190,14 @@ export function AgentConversationPreview({
         <ThreadPrimitive.Root style={{ flex: 1 }}>
           <AgentConversationTimeline entries={entries} theme={theme} />
           <ComposerPrimitive.Root style={styles.composer}>
-            <ComposerPrimitive.Input style={styles.input} placeholder="继续跟进这个 Agent…" placeholderTextColor={theme.colors.foregroundMuted} multiline />
-            <ComposerPrimitive.Send style={styles.send}><Icon name="ArrowUp" color={theme.colors.accentForeground} size={16} /></ComposerPrimitive.Send>
+            <ComposerPrimitive.Input style={styles.input} placeholder="继续跟进这个 Agent…" placeholderTextColor={theme.colors.foregroundMuted} multiline onChange={(e) => setHasInput(!!(e.nativeEvent.text ?? "").trim())} />
+            {isAgentRunning && !hasInput ? (
+              <Pressable accessibilityLabel={isCancelling ? "正在停止…" : "停止 Agent"} onPress={handleCancel} disabled={isCancelling} style={styles.stop}>
+                <Icon name={isCancelling ? "Loader" : "Square"} color="#fff" size={14} />
+              </Pressable>
+            ) : (
+              <ComposerPrimitive.Send style={styles.send}><Icon name="ArrowUp" color={theme.colors.accentForeground} size={16} /></ComposerPrimitive.Send>
+            )}
           </ComposerPrimitive.Root>
         </ThreadPrimitive.Root>
       </ResizeHandle>
