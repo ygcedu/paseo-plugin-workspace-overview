@@ -4,7 +4,7 @@ import React, { useMemo } from "react";
 import { FlatList, Text, TouchableOpacity, View, type ViewStyle, type TextStyle } from "react-native";
 import { WorkspaceAgentRow } from "./components/WorkspaceAgentRow";
 
-export function WorkspaceAgentsPanel({ theme, layout, workspaceId, host }: PluginWorkspacePanelProps) {
+export function WorkspaceAgentsPanel({ theme, layout, workspaceId, navigation }: PluginWorkspacePanelProps) {
   const paseo = usePaseo();
 
   const { data, isLoading, error } = useQuery({
@@ -59,7 +59,7 @@ export function WorkspaceAgentsPanel({ theme, layout, workspaceId, host }: Plugi
           data={agents.map((entry: { agent: { id: string; shortId: string; title: string | null; provider: string; model: string | null; status: string; requiresAttention: boolean } }) => entry.agent)}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
-            <WorkspaceAgentRow agent={item} theme={theme} compact={layout.compact} serverId={host.id} />
+            <WorkspaceAgentRow agent={item} theme={theme} compact={layout.compact} navigation={navigation!} />
           )}
           contentContainerStyle={{ paddingBottom: 16 }}
         />

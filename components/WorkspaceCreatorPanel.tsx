@@ -5,7 +5,6 @@ import { useRpc } from "@getpaseo/plugin";
 import { WorkspaceCreateComposer } from "./WorkspaceCreateComposer";
 import { buildSelection, createWorkspaceChatModel, defaultSelection, providerById, PROVIDER_READY_TIMEOUT_MS, readPaseoProviderModelPreference, selectableModels, type ComposerSelection, type Isolation, type LaunchTarget, type OpenMenu, type ProviderSnapshot, type TerminalProfile, type WorkspaceCreatorPanelProps } from "./workspace-creator-shared";
 import { terminalLaunchRpc } from "../shared/terminal-launch";
-import { openAgentRpc } from "../shared/open-agent";
 
 const DEFAULT_TERMINAL_PROFILES: TerminalProfile[] = [
   { id: "claude", name: "Claude Code", command: "claude", args: ["{{{prompt}}}"], icon: "claude" },
@@ -20,6 +19,7 @@ export function WorkspaceCreatorPanel({
   projectDirectory,
   hostLabel,
   hostId,
+  navigation,
   projects,
   paseo,
   onClose,
@@ -41,7 +41,6 @@ export function WorkspaceCreatorPanel({
   const [launchTarget, setLaunchTarget] = useState<LaunchTarget>({ kind: "chat" });
   const [terminalProfiles, setTerminalProfiles] = useState<TerminalProfile[]>(DEFAULT_TERMINAL_PROFILES);
   const launchTerminal = useRpc(terminalLaunchRpc);
-  const invokeOpenAgent = useRpc(openAgentRpc);
 
   useEffect(() => {
     let cancelled = false;
@@ -202,7 +201,7 @@ export function WorkspaceCreatorPanel({
         launchTarget,
         terminalProfiles,
         launchTerminal,
-        openAgent: (agentId) => invokeOpenAgent({ agentId, serverId: hostId }),
+        openAgent: (agentId) => navigation.openAgent({ agentId }),
         serverId: hostId,
         setSelection,
         setPending,
@@ -212,7 +211,7 @@ export function WorkspaceCreatorPanel({
           onClose();
         },
       }),
-    [baseBranch, hostId, invokeOpenAgent, isolation, launchTarget, launchTerminal, onClose, onCreate, paseo, selectedProject, selection, snapshot, terminalProfiles],
+    [baseBranch, hostId, isolation, launchTarget, launchTerminal, navigation, onClose, onCreate, paseo, selectedProject, selection, snapshot, terminalProfiles],
   );
   const runtime = useLocalRuntime(chatModel);
 

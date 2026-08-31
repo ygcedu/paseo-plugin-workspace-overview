@@ -81,6 +81,7 @@ export interface WorkspaceCreatorPanelProps {
   projectDirectory: string | undefined;
   hostLabel: string;
   hostId: string;
+  navigation: NonNullable<PluginSurfaceProps["navigation"]>;
   projects: WorkspaceProjectOption[];
   paseo: PaseoClient;
   onClose: () => void;
@@ -259,7 +260,7 @@ export function createWorkspaceChatModel(input: {
     prompt: string;
     profile: { name: string; command: string; args: string[] } | null;
   }) => Promise<{ terminalId: string }>;
-  openAgent: (agentId: string) => Promise<unknown>;
+  openAgent: (agentId: string) => void | Promise<unknown>;
   serverId: string;
   setSelection: (selection: ComposerSelection) => void;
   setPending: (pending: boolean) => void;

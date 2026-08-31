@@ -1,13 +1,12 @@
 import React, { useMemo } from "react";
 import { Text, TouchableOpacity, View, type TextStyle, type ViewStyle } from "react-native";
 import type { PluginWorkspacePanelProps } from "@getpaseo/plugin";
-import { useOpenAgent } from "../hooks/useOpenAgent";
 
 export function WorkspaceAgentRow({
   agent,
   theme,
   compact,
-  serverId,
+  navigation,
 }: {
   agent: {
     id: string;
@@ -21,9 +20,8 @@ export function WorkspaceAgentRow({
   };
   theme: PluginWorkspacePanelProps["theme"];
   compact: boolean;
-  serverId: string;
+  navigation: NonNullable<PluginWorkspacePanelProps["navigation"]>;
 }) {
-  const { openAgent } = useOpenAgent(serverId);
   const styles = useMemo(
     () =>
       ({
@@ -58,7 +56,7 @@ export function WorkspaceAgentRow({
   );
 
   return (
-    <TouchableOpacity onPress={() => void openAgent(agent.id)} activeOpacity={0.7}>
+    <TouchableOpacity onPress={() => navigation.openAgent({ agentId: agent.id })} activeOpacity={0.7}>
       <View style={styles.row}>
         <View style={styles.dot} />
         <View style={styles.info}>

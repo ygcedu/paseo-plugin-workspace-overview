@@ -1,9 +1,4 @@
 import type { PluginContext } from "@getpaseo/plugin";
-import { openAgentRpc } from "./shared/open-agent";
-import {
-  buildAgentDeepLinkUrl,
-  openDeepLinkInDesktop,
-} from "./open-agent-impl.server";
 import { WorkspaceOverview } from "./workspace-overview.client";
 import { WorkspaceAgentsPanel } from "./workspace-agents.client";
 import { projectIconRpc } from "./shared/project-icon";
@@ -41,13 +36,6 @@ export default function contribute(plugin: PluginContext) {
     onSelect({ openPanel }) {
       openPanel("agents");
     },
-  });
-
-  // Handles the client `useRpc(openAgentRpc)` call: opens the agent session in
-  // the Paseo desktop app via the OS deep-link path.
-  plugin.handle(openAgentRpc, async ({ agentId, serverId }) => {
-    await openDeepLinkInDesktop(buildAgentDeepLinkUrl(serverId, agentId));
-    return { ok: true };
   });
 
   plugin.handle(projectIconRpc, async ({ projectId, projectDirectory }) => ({

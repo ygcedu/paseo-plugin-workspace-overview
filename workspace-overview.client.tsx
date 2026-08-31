@@ -12,7 +12,6 @@ import { type AgentEntry, type TooltipState, type WorkspaceEntry } from "./overv
 import { projectIconRpc } from "./shared/project-icon";
 import { gitBranchesRpc } from "./shared/git-branches";
 import { AgentConversationPreview } from "./components/AgentConversationPreview";
-import { useOpenAgent } from "./hooks/useOpenAgent";
 
 function resolveProjectSourceDirectory(workspaces: WorkspaceEntry[]): string | undefined {
   return (
@@ -34,7 +33,7 @@ function resolveProjectBranchFallbacks(workspaces: WorkspaceEntry[]) {
   }));
 }
 
-export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
+export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSurfaceProps) {
   const [containerWidth, setContainerWidth] = useState(0);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [cardExpanded, setCardExpanded] = useState<Record<string, boolean>>({});
@@ -51,7 +50,6 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
   const surfaceOrigin = useRef({ x: 0, y: 0 });
 
   const paseo = usePaseo();
-  const { openAgent } = useOpenAgent(host.id);
   const { projects, agentsByWorkspace, isLoading, error, refetch } = useWorkspaces(host.id);
 
   const { filteredProjects, filteredAgentsByWorkspace, autoExpand } = useFilter(
@@ -375,7 +373,7 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
             paseo={paseo}
             theme={theme}
             onClose={() => setSelectedAgentId(null)}
-            onOpenFull={() => void openAgent(selectedAgent.id)}
+            onOpenFull={() => navigation!.openAgent({ agentId: selectedAgent.id })}
           />
         ) : null}
         </View>
@@ -400,6 +398,7 @@ export function WorkspaceOverview({ theme, host, layout }: PluginSurfaceProps) {
             projectDirectory={createDialog.projectDirectory}
             hostLabel={host.label}
             hostId={host.id}
+            navigation={navigation!}
             projects={createProjectOptions}
             paseo={paseo}
             onClose={() => setCreateDialog(null)}
