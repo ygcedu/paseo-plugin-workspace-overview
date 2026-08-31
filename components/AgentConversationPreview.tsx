@@ -5,6 +5,7 @@ import {
   ComposerPrimitive,
   ThreadPrimitive,
   useLocalRuntime,
+  useAuiState,
   type ChatModelAdapter,
   type ChatModelRunOptions,
   type ThreadMessageLike,
@@ -48,6 +49,39 @@ function timelineMessages(entries: AgentTimelineEntry[]): ThreadMessageLike[] {
   return messages;
 }
 
+function ComposerActionButton({
+  isAgentRunning,
+  isCancelling,
+  onCancel,
+  sendStyle,
+  stopStyle,
+  theme,
+}: {
+  isAgentRunning: boolean;
+  isCancelling: boolean;
+  onCancel: () => void;
+  sendStyle: ViewStyle;
+  stopStyle: ViewStyle;
+  theme: PluginSurfaceProps["theme"];
+}) {
+  const composerText = useAuiState((state) => state.composer.text);
+  const hasInput = composerText.trim().length > 0;
+
+  if (isAgentRunning && !hasInput) {
+    return (
+      <Pressable accessibilityLabel={isCancelling ? "正在停止…" : "停止 Agent"} onPress={onCancel} disabled={isCancelling} style={stopStyle}>
+        <Icon name={isCancelling ? "Loader" : "Square"} color="#fff" size={14} />
+      </Pressable>
+    );
+  }
+
+  return (
+    <ComposerPrimitive.Send style={sendStyle}>
+      <Icon name="ArrowUp" color={theme.colors.accentForeground} size={16} />
+    </ComposerPrimitive.Send>
+  );
+}
+
 export function AgentConversationPreview({
   agent,
   paseo,
@@ -67,7 +101,6 @@ export function AgentConversationPreview({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
-  const [hasInput, setHasInput] = useState(false);
   const [liveStatus, setLiveStatus] = useState(agent.status);
   const loadingRef = useRef(false);
 
@@ -141,7 +174,6 @@ export function AgentConversationPreview({
     async run(options) {
       const text = submittedText(options);
       if (!text) return { content: [] };
-      setHasInput(false);
       await handle.send(text);
       setLiveStatus("running");
       setTimeout(() => void refresh(), 250);
@@ -190,14 +222,15 @@ export function AgentConversationPreview({
         <ThreadPrimitive.Root style={{ flex: 1 }}>
           <AgentConversationTimeline entries={entries} theme={theme} />
           <ComposerPrimitive.Root style={styles.composer}>
-            <ComposerPrimitive.Input style={styles.input} placeholder="继续跟进这个 Agent…" placeholderTextColor={theme.colors.foregroundMuted} multiline onChange={(e) => setHasInput(!!(e.nativeEvent.text ?? "").trim())} />
-            {isAgentRunning && !hasInput ? (
-              <Pressable accessibilityLabel={isCancelling ? "正在停止…" : "停止 Agent"} onPress={handleCancel} disabled={isCancelling} style={styles.stop}>
-                <Icon name={isCancelling ? "Loader" : "Square"} color="#fff" size={14} />
-              </Pressable>
-            ) : (
-              <ComposerPrimitive.Send style={styles.send}><Icon name="ArrowUp" color={theme.colors.accentForeground} size={16} /></ComposerPrimitive.Send>
-            )}
+            <ComposerPrimitive.Input style={styles.input} placeholder="继续跟进这个 Agent…" placeholderTextColor={theme.colors.foregroundMuted} multiline />
+            <ComposerActionButton
+              isAgentRunning={isAgentRunning}
+              isCancelling={isCancelling}
+              onCancel={handleCancel}
+              sendStyle={styles.send}
+              stopStyle={styles.stop}
+              theme={theme}
+            />
           </ComposerPrimitive.Root>
         </ThreadPrimitive.Root>
       </ResizeHandle>
