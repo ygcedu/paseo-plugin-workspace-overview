@@ -99,17 +99,6 @@ export function WorkspaceCreatorPanel({
     };
   }, [paseo, selectedProject.projectDirectory]);
 
-  const selectProvider = useCallback(
-    (providerId: string) => {
-      const entry = providerById(snapshot, providerId);
-      if (entry) {
-        setSelection(buildSelection(entry));
-      }
-      setOpenMenu(null);
-    },
-    [snapshot],
-  );
-
   const selectProject = useCallback(
     (nextProjectId: string) => {
       const nextProject = projects.find((project) => project.projectId === nextProjectId);
@@ -243,7 +232,6 @@ export function WorkspaceCreatorPanel({
         onSelectProject={selectProject}
         onSelectIsolation={selectIsolation}
         onSelectBase={selectBase}
-        onSelectProvider={selectProvider}
         onSelectModel={selectModel}
         onSelectMode={selectMode}
         onSelectThinking={selectThinking}

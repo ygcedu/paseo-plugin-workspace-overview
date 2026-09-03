@@ -68,6 +68,14 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
     },
     [agentsByWorkspace, selectedAgentId],
   );
+  const selectedAgentWorkspaceDirectory = useMemo(() => {
+    if (!selectedAgent?.workspaceId) return undefined;
+    for (const project of projects) {
+      const workspace = project.workspaces.find((candidate) => candidate.id === selectedAgent.workspaceId);
+      if (workspace) return workspace.workspaceDirectory;
+    }
+    return undefined;
+  }, [projects, selectedAgent]);
 
   const createProjectOptionsWithoutIcons = useMemo(
     () =>
@@ -207,6 +215,7 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
     return { left, top };
   }, [tooltip, surfaceSize, TOOLTIP_EST_HEIGHT]);
 
+  const statusDanger = (theme.colors as { statusDanger?: string }).statusDanger ?? "#ef4444";
   const tooltipStyles = useMemo(
     () => ({
       container: {
@@ -241,7 +250,7 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
   if (error) {
     return (
       <View style={{ flex: 1, alignItems: "center" as const, justifyContent: "center" as const, backgroundColor: theme.colors.surface0, padding: 24 }}>
-        <Text style={{ color: theme.colors.statusDanger }}>{(error as Error).message}</Text>
+        <Text style={{ color: statusDanger }}>{(error as Error).message}</Text>
         <TouchableOpacity onPress={() => void refetch()} style={{ marginTop: 12 }}>
           <Text style={{ color: theme.colors.accent }}>Retry</Text>
         </TouchableOpacity>
@@ -370,6 +379,7 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
           <AgentConversationPreview
             key={selectedAgent.id}
             agent={selectedAgent}
+            workspaceDirectory={selectedAgentWorkspaceDirectory}
             paseo={paseo}
             theme={theme}
             onClose={() => setSelectedAgentId(null)}

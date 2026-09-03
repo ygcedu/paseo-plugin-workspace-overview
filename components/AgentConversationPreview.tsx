@@ -2,10 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Pressable, Text, View, type TextStyle, type ViewStyle } from "react-native";
 import {
   AssistantRuntimeProvider,
-  ComposerPrimitive,
   ThreadPrimitive,
   useLocalRuntime,
-  useAuiState,
   type ChatModelAdapter,
   type ChatModelRunOptions,
   type ThreadMessageLike,
@@ -17,6 +15,34 @@ import type { AgentEntry } from "../overview.types";
 import type { AgentTimelineEntry } from "./agent-conversation-types";
 import { AgentConversationTimeline } from "./AgentConversationTimeline";
 import { ResizeHandle } from "./ResizeHandle";
+import { createComposerStyles } from "./workspace-creator-styles";
+import { SharedComposerInput } from "./SharedComposerInput";
+import {
+  providerById,
+  selectableModels,
+  defaultSelection,
+  readPaseoProviderModelPreference,
+  PROVIDER_READY_TIMEOUT_MS,
+  buildSelection,
+  type ComposerSelection,
+  type OpenMenu,
+  type ProviderSnapshot,
+} from "./workspace-creator-shared";
+
+function getColors(theme: PluginSurfaceProps["theme"]) {
+  const fallback = {
+    surface0: "#1e1e1e",
+    foreground: "#ffffff",
+    foregroundMuted: "#888888",
+    accent: "#007acc",
+    accentForeground: "#ffffff",
+    statusDanger: "#ef4444",
+  };
+  if (!theme || !theme.colors) {
+    return fallback;
+  }
+  return { ...fallback, ...theme.colors };
+}
 
 function submittedText(options: ChatModelRunOptions): string {
   const user = [...options.messages].reverse().find((message) => message.role === "user");
@@ -49,47 +75,57 @@ function timelineMessages(entries: AgentTimelineEntry[]): ThreadMessageLike[] {
   return messages;
 }
 
-function ComposerActionButton({
-  isAgentRunning,
-  isCancelling,
-  onCancel,
-  sendStyle,
-  stopStyle,
-  theme,
-}: {
-  isAgentRunning: boolean;
-  isCancelling: boolean;
-  onCancel: () => void;
-  sendStyle: ViewStyle;
-  stopStyle: ViewStyle;
-  theme: PluginSurfaceProps["theme"];
-}) {
-  const composerText = useAuiState((state) => state.composer.text);
-  const hasInput = composerText.trim().length > 0;
+function selectionFromAgent(snapshot: ProviderSnapshot, agent: AgentEntry | Record<string, unknown>): ComposerSelection | null {
+  const agentRecord = agent as Record<string, unknown>;
+  const rawProvider = typeof agentRecord.provider === "string" ? agentRecord.provider : "";
+  const separator = rawProvider.indexOf("/");
+  const providerId = separator >= 0 ? rawProvider.slice(0, separator) : rawProvider;
+  const modelIdFromProvider = separator >= 0 ? rawProvider.slice(separator + 1) : null;
+  const rawModel = typeof agentRecord.model === "string" ? agentRecord.model : null;
+  const modelId = rawModel ?? modelIdFromProvider;
+  const entry = providerById(snapshot, providerId);
+  if (!entry) return defaultSelection(snapshot, readPaseoProviderModelPreference());
 
-  if (isAgentRunning && !hasInput) {
-    return (
-      <Pressable accessibilityLabel={isCancelling ? "正在停止…" : "停止 Agent"} onPress={onCancel} disabled={isCancelling} style={stopStyle}>
-        <Icon name={isCancelling ? "Loader" : "Square"} color="#fff" size={14} />
-      </Pressable>
-    );
-  }
+  const model =
+    modelId
+      ? selectableModels(entry).find((item) => item.id === modelId || item.label === modelId) ?? undefined
+      : undefined;
+  const selection = buildSelection(entry, model);
+  const modeId =
+    typeof agentRecord.currentModeId === "string"
+      ? agentRecord.currentModeId
+      : typeof agentRecord.modeId === "string"
+        ? agentRecord.modeId
+        : selection.modeId;
+  const mode = entry.modes?.find((item) => item.id === modeId);
+  const thinkingOptionId =
+    typeof agentRecord.thinkingOptionId === "string"
+      ? agentRecord.thinkingOptionId
+      : typeof agentRecord.effectiveThinkingOptionId === "string"
+        ? agentRecord.effectiveThinkingOptionId
+        : selection.thinkingOptionId;
+  const thinking = (model ?? selectableModels(entry).find((item) => item.id === selection.modelId))
+    ?.thinkingOptions?.find((item) => item.id === thinkingOptionId);
 
-  return (
-    <ComposerPrimitive.Send style={sendStyle}>
-      <Icon name="ArrowUp" color={theme.colors.accentForeground} size={16} />
-    </ComposerPrimitive.Send>
-  );
+  return {
+    ...selection,
+    modeId,
+    modeLabel: mode?.label ?? mode?.id ?? modeId,
+    thinkingOptionId,
+    thinkingLabel: thinking?.label ?? thinking?.id ?? thinkingOptionId,
+  };
 }
 
 export function AgentConversationPreview({
   agent,
+  workspaceDirectory,
   paseo,
   theme,
   onClose,
   onOpenFull,
 }: {
   agent: AgentEntry;
+  workspaceDirectory?: string;
   paseo: PaseoClient;
   theme: PluginSurfaceProps["theme"];
   onClose: () => void;
@@ -104,6 +140,65 @@ export function AgentConversationPreview({
   const [liveStatus, setLiveStatus] = useState(agent.status);
   const loadingRef = useRef(false);
 
+  // Provider/model/mode/thinking selection state (mirrors WorkspaceCreateComposer)
+  const [providerLoading, setProviderLoading] = useState(false);
+  const [snapshot, setSnapshot] = useState<ProviderSnapshot | null>(null);
+  const [selection, setSelection] = useState<ComposerSelection | null>(null);
+  const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
+
+  // Load providers from agent's workspace
+  useEffect(() => {
+    let cancelled = false;
+    const loadProviders = async () => {
+      setProviderLoading(true);
+      try {
+        const refetchResult = await handle.refresh();
+        const agentData = refetchResult?.agent ?? handle.current() ?? agent;
+        const workspaceId = agentData?.workspaceId ?? agent.workspaceId;
+        let projectDirectory: string | undefined;
+        if (workspaceDirectory) {
+          projectDirectory = workspaceDirectory;
+        } else if (workspaceId) {
+          const workspace = paseo.workspaces.ref(workspaceId);
+          const wsData = await workspace.current();
+          if (!wsData) {
+            const refreshed = await workspace.refresh();
+            projectDirectory = refreshed?.workspaceDirectory;
+          } else {
+            projectDirectory = wsData.workspaceDirectory;
+          }
+        }
+        if (!projectDirectory) {
+          projectDirectory = agentData?.cwd;
+        }
+        if (!projectDirectory) return;
+        const nextSnapshot = await paseo.providers.waitForReady({
+          cwd: projectDirectory,
+          timeoutMs: PROVIDER_READY_TIMEOUT_MS,
+        });
+        if (cancelled) return;
+        setSnapshot(nextSnapshot);
+        setSelection((current) => {
+          if (current) return current;
+          return selectionFromAgent(nextSnapshot, agentData);
+        });
+      } catch (loadError) {
+        if (cancelled) return;
+        const message = loadError instanceof Error ? loadError.message : String(loadError);
+        setError(message);
+      } finally {
+        if (!cancelled) setProviderLoading(false);
+      }
+    };
+    loadProviders();
+    return () => {
+      cancelled = true;
+    };
+  }, [agent, handle, paseo, workspaceDirectory]);
+
+  const currentProvider = providerById(snapshot, selection?.providerId ?? "");
+  const modes = currentProvider?.modes ?? [];
+
   const refresh = useCallback(async () => {
     if (loadingRef.current) return;
     loadingRef.current = true;
@@ -112,9 +207,20 @@ export function AgentConversationPreview({
       setEntries(page.entries);
       setMessages(timelineMessages(page.entries));
       setError(page.error);
-      const snapshot = (page as { agent?: { status?: string } | null }).agent;
-      if (snapshot?.status) {
-        setLiveStatus(snapshot.status as typeof liveStatus);
+      const agentSnapshot = (page as { agent?: { status?: string; currentModeId?: string | null } | null }).agent;
+      if (agentSnapshot?.status) {
+        setLiveStatus(agentSnapshot.status as typeof liveStatus);
+        setSelection((current) => {
+          if (!current || !("currentModeId" in agentSnapshot)) return current;
+          const nextModeId = typeof agentSnapshot.currentModeId === "string" ? agentSnapshot.currentModeId : current.modeId;
+          if (nextModeId === current.modeId) return current;
+          const mode = currentProvider?.modes?.find((item) => item.id === nextModeId);
+          return {
+            ...current,
+            modeId: nextModeId,
+            modeLabel: mode?.label ?? mode?.id ?? nextModeId,
+          };
+        });
       } else if (handle.status) {
         setLiveStatus(handle.status);
       }
@@ -124,7 +230,7 @@ export function AgentConversationPreview({
       loadingRef.current = false;
       setLoading(false);
     }
-  }, [handle]);
+  }, [currentProvider, handle]);
 
   const isAgentRunning = liveStatus === "running";
 
@@ -170,7 +276,7 @@ export function AgentConversationPreview({
     return () => { unsubscribe(); clearInterval(timer); };
   }, [agent.id, agent.status, handle, refresh]);
 
-  const model = useMemo<ChatModelAdapter>(() => ({
+  const chatModel = useMemo<ChatModelAdapter>(() => ({
     async run(options) {
       const text = submittedText(options);
       if (!text) return { content: [] };
@@ -180,23 +286,48 @@ export function AgentConversationPreview({
       return { content: [] };
     },
   }), [handle, refresh]);
-  const runtime = useLocalRuntime(model, { initialMessages: messages });
+  const runtime = useLocalRuntime(chatModel, { initialMessages: messages });
 
   useEffect(() => {
     runtime.thread.reset(messages);
   }, [messages, runtime]);
 
+  const colors = getColors(theme);
+  const composerStyles = useMemo(() => createComposerStyles(theme), [theme]);
   const styles = useMemo(() => ({
-    panel: { height: "100%", borderLeftWidth: 1, borderLeftColor: theme.colors.foregroundMuted + "22", backgroundColor: theme.colors.surface0 } as ViewStyle,
-    header: { height: 54, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 8, borderBottomWidth: 1, borderBottomColor: theme.colors.foregroundMuted + "22" } as ViewStyle,
-    title: { flex: 1, color: theme.colors.foreground, fontSize: 14, fontWeight: "600" } as TextStyle,
-    subtitle: { color: theme.colors.foregroundMuted, fontSize: 11 } as TextStyle,
-    iconButton: { width: 30, height: 30, alignItems: "center", justifyContent: "center" } as ViewStyle,
-    composer: { margin: 12, borderWidth: 1, borderColor: theme.colors.foregroundMuted + "33", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, flexDirection: "row", alignItems: "flex-end", gap: 8 } as ViewStyle,
-    input: { flex: 1, minHeight: 36, maxHeight: 120, color: theme.colors.foreground, fontSize: 13, borderWidth: 0 } as TextStyle,
-    send: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.accent } as ViewStyle,
-    stop: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.statusDanger } as ViewStyle,
-  }), [theme]);
+    ...composerStyles,
+    panel: {
+      height: "100%",
+      borderLeftWidth: 1,
+      borderLeftColor: colors.foregroundMuted + "22",
+      backgroundColor: colors.surface0,
+    } as ViewStyle,
+    header: {
+      height: 54,
+      paddingHorizontal: 14,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.foregroundMuted + "22",
+    } as ViewStyle,
+    title: {
+      flex: 1,
+      color: colors.foreground,
+      fontSize: 14,
+      fontWeight: "600",
+    } as TextStyle,
+    subtitle: {
+      color: colors.foregroundMuted,
+      fontSize: 11,
+    } as TextStyle,
+    iconButton: {
+      width: 30,
+      height: 30,
+      alignItems: "center",
+      justifyContent: "center",
+    } as ViewStyle,
+  }), [colors, composerStyles]);
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
@@ -214,24 +345,65 @@ export function AgentConversationPreview({
             <Text style={styles.title} numberOfLines={1}>{agent.title ?? agent.id.slice(0, 8)}</Text>
             <Text style={styles.subtitle}>{agent.provider}{agent.model ? ` · ${agent.model}` : ""} · {liveStatus}</Text>
           </View>
-          <Pressable accessibilityLabel="打开完整会话" onPress={onOpenFull} style={styles.iconButton}><Icon name="ExternalLink" color={theme.colors.foregroundMuted} size={16} /></Pressable>
-          <Pressable accessibilityLabel="关闭会话预览" onPress={onClose} style={styles.iconButton}><Icon name="X" color={theme.colors.foregroundMuted} size={16} /></Pressable>
+          <Pressable accessibilityLabel="打开完整会话" onPress={onOpenFull} style={styles.iconButton}><Icon name="ExternalLink" color={colors.foregroundMuted} size={16} /></Pressable>
+          <Pressable accessibilityLabel="关闭会话预览" onPress={onClose} style={styles.iconButton}><Icon name="X" color={colors.foregroundMuted} size={16} /></Pressable>
         </View>
-        {loading ? <Text style={{ color: theme.colors.foregroundMuted, padding: 16 }}>加载会话中…</Text> : null}
-        {error ? <Text style={{ color: theme.colors.statusDanger, padding: 16 }}>{error}</Text> : null}
+        {loading ? <Text style={{ color: colors.foregroundMuted, padding: 16 }}>加载会话中…</Text> : null}
+        {error ? <Text style={{ color: colors.statusDanger, padding: 16 }}>{error}</Text> : null}
         <ThreadPrimitive.Root style={{ flex: 1 }}>
           <AgentConversationTimeline entries={entries} theme={theme} />
-          <ComposerPrimitive.Root style={styles.composer}>
-            <ComposerPrimitive.Input style={styles.input} placeholder="继续跟进这个 Agent…" placeholderTextColor={theme.colors.foregroundMuted} multiline />
-            <ComposerActionButton
-              isAgentRunning={isAgentRunning}
-              isCancelling={isCancelling}
-              onCancel={handleCancel}
-              sendStyle={styles.send}
-              stopStyle={styles.stop}
-              theme={theme}
-            />
-          </ComposerPrimitive.Root>
+          <SharedComposerInput
+            selection={selection}
+            snapshot={snapshot}
+            providerLoading={providerLoading}
+            openMenu={openMenu}
+            onToggleMenu={setOpenMenu}
+            onSelectModel={(id) => {
+              const separator = id.indexOf("::");
+              const providerId = separator >= 0 ? id.slice(0, separator) : selection?.providerId ?? "";
+              const modelId = separator >= 0 ? id.slice(separator + 2) : id;
+              const entry = providerById(snapshot, providerId);
+              const modelItem = selectableModels(entry).find((item) => item.id === modelId) ?? null;
+              if (entry && modelItem) {
+                setSelection(buildSelection(entry, modelItem));
+              }
+              setOpenMenu(null);
+            }}
+            onSelectMode={(id) => {
+              const mode = modes.find((item) => item.id === id);
+              setSelection((current) =>
+                current
+                  ? {
+                      ...current,
+                      modeId: id,
+                      modeLabel: mode?.label ?? mode?.id ?? id,
+                    }
+                  : current,
+              );
+              setOpenMenu(null);
+            }}
+            onSelectThinking={(id) => {
+              setSelection((current) =>
+                current
+                  ? {
+                      ...current,
+                      thinkingOptionId: id,
+                      thinkingLabel:
+                        selectableModels(currentProvider)
+                          .find((item) => item.id === current.modelId)
+                          ?.thinkingOptions?.find((option) => option.id === id)?.label ?? id,
+                    }
+                  : current,
+              );
+              setOpenMenu(null);
+            }}
+            isAgentRunning={isAgentRunning}
+            isCancelling={isCancelling}
+            onCancel={handleCancel}
+            placeholder="继续跟进这个 Agent…"
+            theme={theme}
+            autoFocus
+          />
         </ThreadPrimitive.Root>
       </ResizeHandle>
     </AssistantRuntimeProvider>

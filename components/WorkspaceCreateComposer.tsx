@@ -1,17 +1,15 @@
 import React, { useEffect, useMemo } from "react";
 import { Pressable, Text, View } from "react-native";
-import { ComposerPrimitive } from "@assistant-ui/react-native";
 import type { PluginSurfaceProps } from "@getpaseo/plugin";
 import { Icon } from "@getpaseo/plugin/react-native";
-import { ModelBrowserMenu } from "./ModelBrowserMenu";
 import { Badge } from "./WorkspaceBadge";
 import { Menu } from "./WorkspaceMenu";
-import { SelectControl } from "./WorkspaceSelectControl";
-import { defaultModel, formatControlValue, providerById, readyProviders, selectableModels, type ComposerSelection, type Isolation, type LaunchTarget, type MenuOption, type OpenMenu, type ProviderSnapshot, type TerminalProfile, type WorkspaceProjectOption } from "./workspace-creator-shared";
+import { type ComposerSelection, type Isolation, type LaunchTarget, type MenuOption, type OpenMenu, type ProviderSnapshot, type TerminalProfile, type WorkspaceProjectOption } from "./workspace-creator-shared";
 import { createComposerStyles } from "./workspace-creator-styles";
 import { ProjectIcon } from "./ProjectIcon";
 import { ProviderBrandIcon } from "./ProviderBrandIcon";
 import { WorkspaceLaunchMenu } from "./WorkspaceLaunchMenu";
+import { SharedComposerInput } from "./SharedComposerInput";
 
 export function WorkspaceCreateComposer({
   project,
@@ -32,7 +30,6 @@ export function WorkspaceCreateComposer({
   onSelectProject,
   onSelectIsolation,
   onSelectBase,
-  onSelectProvider,
   onSelectModel,
   onSelectMode,
   onSelectThinking,
@@ -57,7 +54,6 @@ export function WorkspaceCreateComposer({
   onSelectProject: (projectId: string) => void;
   onSelectIsolation: (isolation: Isolation) => void;
   onSelectBase: (branch: string) => void;
-  onSelectProvider: (providerId: string) => void;
   onSelectModel: (modelId: string) => void;
   onSelectMode: (modeId: string) => void;
   onSelectThinking: (thinkingId: string) => void;
@@ -105,43 +101,12 @@ export function WorkspaceCreateComposer({
     return () => style.remove();
   }, []);
 
-  const provider = providerById(snapshot, selection?.providerId ?? "");
-  const providers = readyProviders(snapshot ?? { entries: [] });
-  const models = selectableModels(provider);
-  const modes = provider?.modes ?? [];
-  const selectedMode = modes.find((item) => item.id === selection?.modeId) ?? null;
-  const model = models.find((item) => item.id === selection?.modelId) ?? defaultModel(provider);
-  const thinkingOptions = model?.thinkingOptions ?? [];
   const selectedTerminalProfile = launchTarget.kind === "terminal"
     ? terminalProfiles.find((profile) => profile.id === launchTarget.profileId) ?? null
     : null;
   const launchLabel = launchTarget.kind === "chat"
     ? "Chat"
     : selectedTerminalProfile ? `Terminal ${selectedTerminalProfile.name}` : "Terminal";
-
-  const providerOptions = providers.map((entry) => ({
-    id: entry.provider,
-    label: entry.label ?? entry.provider,
-    detail: entry.provider,
-  }));
-  const modelOptions = providers.flatMap((entry) =>
-    selectableModels(entry).map((item) => ({
-      id: `${entry.provider}::${item.id}`,
-      label: item.label,
-      detail: entry.label ?? entry.provider,
-    })),
-  );
-  const modeOptions = modes.map((item) => ({
-    id: item.id,
-    label: item.label ?? item.id,
-    detail: item.description,
-    iconName: item.icon,
-  }));
-  const thinkingOptionsForMenu = thinkingOptions.map((item) => ({
-    id: item.id,
-    label: item.label ?? item.id,
-    iconName: "Brain",
-  }));
 
   const projectOptions = projects.map((item) => ({
     id: item.projectId,
@@ -164,9 +129,6 @@ export function WorkspaceCreateComposer({
   }));
   const hostOptions: MenuOption[] = [{ id: "current", label: hostLabel, iconName: "Server" }];
   const topMenuOpen = openMenu === "project" || openMenu === "host" || openMenu === "isolation" || openMenu === "base" || openMenu === "launch";
-  const composerMenuOpen =
-    openMenu === "provider" || openMenu === "model" || openMenu === "mode" || openMenu === "thinking";
-
   if (!project) return null;
 
   return (
@@ -253,48 +215,25 @@ export function WorkspaceCreateComposer({
           </View>
         </View>
 
-        <ComposerPrimitive.Root style={[styles.inputWrapper, composerMenuOpen && styles.menuRegionActive]}>
-          <ComposerPrimitive.Input
-            nativeID="workspace-create-prompt"
-            style={styles.textInput}
-            placeholder={launchTarget.kind === "chat" ? "给 Agent 发消息，标记 @files，或使用 /commands 和 /skills" : selectedTerminalProfile ? "输入启动提示词" : "输入终端命令"}
-            placeholderTextColor={theme.colors.foregroundMuted + "66"}
-            multiline
-            autoFocus
-            editable={!pending}
-          />
-
-          <View style={styles.buttonRow}>
-            {launchTarget.kind === "chat" ? <View style={styles.leftControls}>
-              <View nativeID="workspace-create-dropdown-model" style={[styles.controlAnchor, openMenu === "model" && styles.controlAnchorOpen]}>
-                <SelectControl kind="model" providerId={selection?.providerId} value={formatControlValue(selection?.modelLabel ?? null, "Model")} disabled={pending || providerLoading || modelOptions.length <= 1} open={openMenu === "model"} onPress={() => onToggleMenu(openMenu === "model" ? null : "model")} theme={theme} />
-                {openMenu === "model" ? <ModelBrowserMenu providers={providers} selection={selection} onSelect={onSelectModel} theme={theme} /> : null}
-              </View>
-              {thinkingOptionsForMenu.length > 0 ? (
-                <View nativeID="workspace-create-dropdown-thinking" style={[styles.controlAnchor, openMenu === "thinking" && styles.controlAnchorOpen]}>
-                  <SelectControl kind="thinking" value={formatControlValue(selection?.thinkingLabel ?? null, "Thinking")} disabled={pending || providerLoading || thinkingOptionsForMenu.length <= 1} open={openMenu === "thinking"} onPress={() => onToggleMenu(openMenu === "thinking" ? null : "thinking")} theme={theme} />
-                  {openMenu === "thinking" ? <Menu kind="thinking" options={thinkingOptionsForMenu} selectedId={selection?.thinkingOptionId ?? null} onSelect={onSelectThinking} theme={theme} /> : null}
-                </View>
-              ) : null}
-              {modeOptions.length > 0 ? (
-                <View nativeID="workspace-create-dropdown-mode" style={[styles.controlAnchor, openMenu === "mode" && styles.controlAnchorOpen]}>
-                  <SelectControl kind="mode" iconName={selectedMode?.icon ?? "Bot"} value={formatControlValue(selection?.modeLabel ?? null, "Mode")} disabled={pending || providerLoading || modeOptions.length <= 1} open={openMenu === "mode"} onPress={() => onToggleMenu(openMenu === "mode" ? null : "mode")} theme={theme} />
-                  {openMenu === "mode" ? <Menu kind="mode" options={modeOptions} selectedId={selection?.modeId ?? null} onSelect={onSelectMode} theme={theme} /> : null}
-                </View>
-              ) : null}
-            </View> : <View style={styles.leftControls} />}
-
-            <View style={styles.rightControls}>
-              {pending ? <Text style={styles.pendingText}>Sending</Text> : null}
-              <ComposerPrimitive.Send
-                disabled={pending}
-                style={[styles.sendButton, pending && styles.disabled]}
-              >
-                <Icon name="CornerDownLeft" color={theme.colors.accentForeground} size={16} />
-              </ComposerPrimitive.Send>
-            </View>
-          </View>
-        </ComposerPrimitive.Root>
+        <SharedComposerInput
+          selection={selection}
+          snapshot={snapshot}
+          providerLoading={providerLoading}
+          openMenu={openMenu}
+          onToggleMenu={onToggleMenu}
+          onSelectModel={onSelectModel}
+          onSelectMode={onSelectMode}
+          onSelectThinking={onSelectThinking}
+          isAgentRunning={false}
+          isCancelling={false}
+          onCancel={() => {}}
+          placeholder={launchTarget.kind === "chat" ? "给 Agent 发消息，标记 @files，或使用 /commands 和 /skills" : selectedTerminalProfile ? "输入启动提示词" : "输入终端命令"}
+          theme={theme}
+          disabled={pending}
+          showAgentControls={launchTarget.kind === "chat"}
+          autoFocus
+          pendingLabel={pending ? "Sending" : null}
+        />
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
       </View>
     </View>

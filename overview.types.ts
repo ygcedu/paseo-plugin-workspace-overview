@@ -27,7 +27,11 @@ export interface AgentEntry {
   title: string | null;
   provider: string;
   model: string | null;
+  thinkingOptionId?: string | null;
+  effectiveThinkingOptionId?: string | null;
+  currentModeId?: string | null;
   status: "initializing" | "idle" | "running" | "error" | "closed" | string;
+  cwd?: string;
   updatedAt?: string;
   lastUserMessageAt?: string | null;
   requiresAttention?: boolean;
