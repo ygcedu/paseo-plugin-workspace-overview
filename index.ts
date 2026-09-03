@@ -7,8 +7,8 @@ import { gitBranchesRpc } from "./shared/git-branches";
 import { readGitBranches } from "./git-branches-impl.server";
 import { terminalLaunchRpc } from "./shared/terminal-launch";
 import { launchWorkspaceTerminal } from "./terminal-launch-impl.server";
-import { autoCommitInfoRpc } from "./shared/auto-commit";
-import { readAutoCommitInfo } from "./auto-commit-impl.server";
+import { autoCommitInfoRpc, autoCommitStartRpc, autoCommitStatusRpc } from "./shared/auto-commit";
+import { readAutoCommitInfo, readAutoCommitTaskStatus, startAutoCommitTask } from "./auto-commit-impl.server";
 
 export default function contribute(plugin: PluginContext) {
   // Global sidebar surface: shows all workspaces with agent counts as cards
@@ -51,6 +51,8 @@ export default function contribute(plugin: PluginContext) {
   plugin.handle(terminalLaunchRpc, launchWorkspaceTerminal);
 
   plugin.handle(autoCommitInfoRpc, readAutoCommitInfo);
+  plugin.handle(autoCommitStartRpc, startAutoCommitTask);
+  plugin.handle(autoCommitStatusRpc, ({ taskId }) => readAutoCommitTaskStatus(taskId));
 
   return () => {};
 }

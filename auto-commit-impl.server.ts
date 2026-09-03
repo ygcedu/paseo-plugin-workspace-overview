@@ -1,11 +1,26 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, parse } from "node:path";
 import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 const PLUGIN_ID = "workspace-overview";
+const PI_MODEL = "9router/coding";
+
+interface AutoCommitTask {
+  taskId: string;
+  cwd: string;
+  status: "running" | "done" | "error";
+  output: string;
+  error: string | null;
+  exitCode: number | null;
+  startedAt: string;
+  finishedAt: string | null;
+}
+
+const tasks = new Map<string, AutoCommitTask>();
 
 function getModuleDirectory(): string | null {
   const metaUrl = (import.meta as { url?: string }).url;
@@ -103,4 +118,68 @@ export async function readAutoCommitInfo(): Promise<{
     status,
     recentMessages: (log ?? "").split("\n").filter(Boolean),
   };
+}
+
+function buildAutoCommitPrompt() {
+  return [
+    "请帮我提交当前仓库里的待提交改动。",
+    "",
+    "你自己判断怎么提交：可以是一个 commit，也可以根据改动内容拆成多个 commit。",
+    "",
+    "请先用 git 查看最近几条 commit message，参考这个仓库已有的 message 风格。",
+    "然后自己阅读当前所有待提交代码，包括已修改文件和还没被 git 管理的新文件，理解改动内容后再提交。",
+    "",
+    "不要 push，也不要丢弃用户改动。",
+  ].join("\n");
+}
+
+function appendTaskOutput(task: AutoCommitTask, chunk: Buffer | string) {
+  task.output = `${task.output}${chunk.toString()}`.slice(-20_000);
+}
+
+export async function startAutoCommitTask(): Promise<{ taskId: string; cwd: string }> {
+  const info = await readAutoCommitInfo();
+  if (!info.hasChanges) {
+    throw new Error("没有待提交改动");
+  }
+
+  const task: AutoCommitTask = {
+    taskId: randomUUID(),
+    cwd: info.cwd,
+    status: "running",
+    output: "",
+    error: null,
+    exitCode: null,
+    startedAt: new Date().toISOString(),
+    finishedAt: null,
+  };
+  tasks.set(task.taskId, task);
+
+  const child = spawn("pi", ["--model", PI_MODEL, "--approve", "-p", buildAutoCommitPrompt()], {
+    cwd: info.cwd,
+    env: process.env,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  child.stdout.on("data", (chunk) => appendTaskOutput(task, chunk));
+  child.stderr.on("data", (chunk) => appendTaskOutput(task, chunk));
+  child.on("error", (error) => {
+    task.status = "error";
+    task.error = error.message;
+    task.finishedAt = new Date().toISOString();
+  });
+  child.on("close", (code) => {
+    task.exitCode = code;
+    task.status = code === 0 ? "done" : "error";
+    task.error = code === 0 ? null : task.error ?? `pi 进程退出，exit code ${code}`;
+    task.finishedAt = new Date().toISOString();
+  });
+
+  return { taskId: task.taskId, cwd: task.cwd };
+}
+
+export function readAutoCommitTaskStatus(taskId: string): AutoCommitTask {
+  const task = tasks.get(taskId);
+  if (!task) throw new Error(`找不到一键提交任务: ${taskId}`);
+  return task;
 }

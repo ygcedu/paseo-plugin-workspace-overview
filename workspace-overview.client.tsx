@@ -12,9 +12,8 @@ import { useFilter, TIME_RANGES, type TimeRange } from "./hooks/useFilter";
 import { type AgentEntry, type TooltipState, type WorkspaceEntry } from "./overview.types";
 import { projectIconRpc } from "./shared/project-icon";
 import { gitBranchesRpc } from "./shared/git-branches";
-import { autoCommitInfoRpc } from "./shared/auto-commit";
+import { autoCommitStartRpc, autoCommitStatusRpc } from "./shared/auto-commit";
 import { AgentConversationPreview } from "./components/AgentConversationPreview";
-import { buildSelection, providerModelId, readyProviders, PROVIDER_READY_TIMEOUT_MS, type ProviderSnapshot } from "./components/workspace-creator-shared";
 
 function resolveProjectSourceDirectory(workspaces: WorkspaceEntry[]): string | undefined {
   return (
@@ -36,39 +35,12 @@ function resolveProjectBranchFallbacks(workspaces: WorkspaceEntry[]) {
   }));
 }
 
-function selectCommitProvider(snapshot: ProviderSnapshot) {
-  const providers = readyProviders(snapshot);
-  const piProvider =
-    providers.find((entry) => entry.provider.toLowerCase() === "pi") ??
-    providers.find((entry) => (entry.label ?? entry.provider).toLowerCase().includes("pi")) ??
-    null;
-  if (!piProvider) return null;
-
-  const codingModel = piProvider.models?.find((model) => model.id === "9router/coding") ?? null;
-  if (!codingModel) return null;
-
-  return buildSelection(piProvider, codingModel);
-}
-
-function buildAutoCommitPrompt() {
-  return [
-    "请帮我提交当前仓库里的待提交改动。",
-    "",
-    "你自己判断怎么提交：可以是一个 commit，也可以根据改动内容拆成多个 commit。",
-    "",
-    "请先用 git 查看最近几条 commit message，参考这个仓库已有的 message 风格。",
-    "然后自己阅读当前所有待提交代码，包括已修改文件和还没被 git 管理的新文件，理解改动内容后再提交。",
-    "",
-    "不要 push，也不要丢弃用户改动。",
-  ].join("\n");
-}
-
 type AutoCommitState =
   | { kind: "idle" }
   | { kind: "preparing"; message: string }
-  | { kind: "running"; agentId: string; provider: string; status: string; message: string }
-  | { kind: "done"; agentId: string; provider: string; message: string }
-  | { kind: "error"; message: string; agentId?: string; provider?: string };
+  | { kind: "running"; taskId: string; message: string }
+  | { kind: "done"; taskId: string; message: string }
+  | { kind: "error"; message: string; taskId?: string };
 
 export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSurfaceProps) {
   const [containerWidth, setContainerWidth] = useState(0);
@@ -133,7 +105,8 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
   );
   const getProjectIcon = useRpc(projectIconRpc);
   const getGitBranches = useRpc(gitBranchesRpc);
-  const getAutoCommitInfo = useRpc(autoCommitInfoRpc);
+  const startAutoCommit = useRpc(autoCommitStartRpc);
+  const getAutoCommitStatus = useRpc(autoCommitStatusRpc);
   const [autoCommitPending, setAutoCommitPending] = useState(false);
   const [autoCommitState, setAutoCommitState] = useState<AutoCommitState>({ kind: "idle" });
   const [autoCommitCopied, setAutoCommitCopied] = useState(false);
@@ -213,78 +186,38 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
     if (autoCommitPending) return;
     setAutoCommitPending(true);
     setAutoCommitCopied(false);
-    setAutoCommitState({ kind: "preparing", message: "正在检查待提交改动" });
+    setAutoCommitState({ kind: "preparing", message: "正在启动 Pi 独立进程" });
 
     try {
-      const info = await getAutoCommitInfo({});
-      if (!info.hasChanges) {
-        setAutoCommitState({ kind: "error", message: "没有待提交改动" });
+      const { taskId } = await startAutoCommit({});
+      setAutoCommitState({ kind: "running", taskId, message: "Pi 已启动，正在提交" });
+
+      for (;;) {
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+        const status = await getAutoCommitStatus({ taskId });
+        const message = status.output.trim().split("\n").filter(Boolean).slice(-1)[0] ?? "Pi 正在运行";
+        if (status.status === "running") {
+          setAutoCommitState({ kind: "running", taskId, message });
+          continue;
+        }
+        if (status.status === "done") {
+          setAutoCommitState({ kind: "done", taskId, message: message || "Pi 已完成提交" });
+          void refetch();
+          return;
+        }
+        setAutoCommitState({
+          kind: "error",
+          taskId,
+          message: [status.error, status.output].filter(Boolean).join("\n").trim() || "Pi 提交失败",
+        });
         return;
-      }
-
-      setAutoCommitState({ kind: "preparing", message: "正在加载 provider" });
-      const snapshot = await paseo.providers.waitForReady({
-        cwd: info.cwd,
-        timeoutMs: PROVIDER_READY_TIMEOUT_MS,
-      });
-      const selection = selectCommitProvider(snapshot);
-      if (!selection) throw new Error("Pi provider 下没有可用的 9router/coding 模型");
-      const provider = providerModelId(selection);
-
-      setAutoCommitState({ kind: "preparing", message: `正在创建提交 agent · ${provider}` });
-      const agent = await paseo.agents.create({
-        cwd: info.cwd,
-        title: "一键提交代码",
-        config: {
-          provider,
-          ...(selection.modeId ? { modeId: selection.modeId } : {}),
-          ...(selection.thinkingOptionId ? { thinkingOptionId: selection.thinkingOptionId } : {}),
-        },
-        labels: { purpose: "auto-commit" },
-        prompt: buildAutoCommitPrompt(),
-      });
-
-      setAutoCommitState({
-        kind: "running",
-        agentId: agent.id,
-        provider,
-        status: agent.status ?? "running",
-        message: "agent 已启动，正在分析 diff 并提交",
-      });
-      navigation?.openAgent({ agentId: agent.id });
-      void refetch();
-
-      const unsubscribe = agent.subscribe((update: { status?: string; requiresAttention?: boolean; attentionReason?: string | null }) => {
-        const status = update.status ?? "running";
-        setAutoCommitState({
-          kind: "running",
-          agentId: agent.id,
-          provider,
-          status,
-          message: update.requiresAttention
-            ? `agent 需要处理 · ${update.attentionReason ?? status}`
-            : `agent ${status}`,
-        });
-      });
-
-      try {
-        const result = await agent.waitForFinish(10 * 60 * 1000);
-        setAutoCommitState({
-          kind: "done",
-          agentId: agent.id,
-          provider,
-          message: result.lastMessage?.trim() || "agent 已结束",
-        });
-        void refetch();
-      } finally {
-        unsubscribe();
       }
     } catch (error) {
       setAutoCommitState({ kind: "error", message: error instanceof Error ? error.message : String(error) });
     } finally {
       setAutoCommitPending(false);
     }
-  }, [autoCommitPending, getAutoCommitInfo, navigation, paseo, refetch]);
+  }, [autoCommitPending, getAutoCommitStatus, refetch, startAutoCommit]);
 
   const handleCopyAutoCommitError = useCallback(() => {
     if (autoCommitState.kind !== "error") return;
@@ -475,12 +408,7 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
           </Text>
           {autoCommitState.kind !== "idle" && autoCommitState.kind !== "error" ? (
             <TouchableOpacity
-              disabled={!("agentId" in autoCommitState) || !autoCommitState.agentId || !navigation}
-              onPress={() => {
-                if ("agentId" in autoCommitState && autoCommitState.agentId) {
-                  navigation?.openAgent({ agentId: autoCommitState.agentId });
-                }
-              }}
+              disabled
               activeOpacity={0.75}
               style={{
                 marginTop: 8,
