@@ -1,6 +1,7 @@
 import { type PluginSurfaceProps, usePaseo, useRpc } from "@getpaseo/plugin";
+import { Icon } from "@getpaseo/plugin/react-native";
 import { useQuery } from "@tanstack/react-query";
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, Text, TouchableOpacity, View, type LayoutChangeEvent, type ViewStyle, type TextStyle } from "react-native";
 
 import { TooltipProvider, useTooltip } from "./components/Tooltip";
@@ -11,7 +12,9 @@ import { useFilter, TIME_RANGES, type TimeRange } from "./hooks/useFilter";
 import { type AgentEntry, type TooltipState, type WorkspaceEntry } from "./overview.types";
 import { projectIconRpc } from "./shared/project-icon";
 import { gitBranchesRpc } from "./shared/git-branches";
+import { autoCommitInfoRpc } from "./shared/auto-commit";
 import { AgentConversationPreview } from "./components/AgentConversationPreview";
+import { buildSelection, providerModelId, readyProviders, PROVIDER_READY_TIMEOUT_MS, type ProviderSnapshot } from "./components/workspace-creator-shared";
 
 function resolveProjectSourceDirectory(workspaces: WorkspaceEntry[]): string | undefined {
   return (
@@ -32,6 +35,40 @@ function resolveProjectBranchFallbacks(workspaces: WorkspaceEntry[]) {
     detail: "当前 Workspace 分支",
   }));
 }
+
+function selectCommitProvider(snapshot: ProviderSnapshot) {
+  const providers = readyProviders(snapshot);
+  const piProvider =
+    providers.find((entry) => entry.provider.toLowerCase() === "pi") ??
+    providers.find((entry) => (entry.label ?? entry.provider).toLowerCase().includes("pi")) ??
+    null;
+  if (!piProvider) return null;
+
+  const codingModel = piProvider.models?.find((model) => model.id === "9router/coding") ?? null;
+  if (!codingModel) return null;
+
+  return buildSelection(piProvider, codingModel);
+}
+
+function buildAutoCommitPrompt() {
+  return [
+    "请帮我提交当前仓库里的待提交改动。",
+    "",
+    "你自己判断怎么提交：可以是一个 commit，也可以根据改动内容拆成多个 commit。",
+    "",
+    "请先用 git 查看最近几条 commit message，参考这个仓库已有的 message 风格。",
+    "然后自己阅读当前所有待提交代码，包括已修改文件和还没被 git 管理的新文件，理解改动内容后再提交。",
+    "",
+    "不要 push，也不要丢弃用户改动。",
+  ].join("\n");
+}
+
+type AutoCommitState =
+  | { kind: "idle" }
+  | { kind: "preparing"; message: string }
+  | { kind: "running"; agentId: string; provider: string; status: string; message: string }
+  | { kind: "done"; agentId: string; provider: string; message: string }
+  | { kind: "error"; message: string; agentId?: string; provider?: string };
 
 export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSurfaceProps) {
   const [containerWidth, setContainerWidth] = useState(0);
@@ -96,6 +133,10 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
   );
   const getProjectIcon = useRpc(projectIconRpc);
   const getGitBranches = useRpc(gitBranchesRpc);
+  const getAutoCommitInfo = useRpc(autoCommitInfoRpc);
+  const [autoCommitPending, setAutoCommitPending] = useState(false);
+  const [autoCommitState, setAutoCommitState] = useState<AutoCommitState>({ kind: "idle" });
+  const [autoCommitCopied, setAutoCommitCopied] = useState(false);
   const { data: projectIcons = new Map<string, string | null>() } = useQuery({
     queryKey: ["workspace-overview-project-icons", host.id, createProjectOptionsWithoutIcons.map((item) => item.projectId)],
     queryFn: async () => {
@@ -161,6 +202,101 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
     setCardExpanded((prev) => ({ ...prev, [projectId]: !currentEffective }));
   }, []);
 
+  useEffect(() => {
+    if (autoCommitState.kind !== "error") return;
+    setAutoCommitCopied(false);
+    const timer = setTimeout(() => setAutoCommitState({ kind: "idle" }), 8000);
+    return () => clearTimeout(timer);
+  }, [autoCommitState]);
+
+  const handleAutoCommit = useCallback(async () => {
+    if (autoCommitPending) return;
+    setAutoCommitPending(true);
+    setAutoCommitCopied(false);
+    setAutoCommitState({ kind: "preparing", message: "正在检查待提交改动" });
+
+    try {
+      const info = await getAutoCommitInfo({});
+      if (!info.hasChanges) {
+        setAutoCommitState({ kind: "error", message: "没有待提交改动" });
+        return;
+      }
+
+      setAutoCommitState({ kind: "preparing", message: "正在加载 provider" });
+      const snapshot = await paseo.providers.waitForReady({
+        cwd: info.cwd,
+        timeoutMs: PROVIDER_READY_TIMEOUT_MS,
+      });
+      const selection = selectCommitProvider(snapshot);
+      if (!selection) throw new Error("Pi provider 下没有可用的 9router/coding 模型");
+      const provider = providerModelId(selection);
+
+      setAutoCommitState({ kind: "preparing", message: `正在创建提交 agent · ${provider}` });
+      const agent = await paseo.agents.create({
+        cwd: info.cwd,
+        title: "一键提交代码",
+        config: {
+          provider,
+          ...(selection.modeId ? { modeId: selection.modeId } : {}),
+          ...(selection.thinkingOptionId ? { thinkingOptionId: selection.thinkingOptionId } : {}),
+        },
+        labels: { purpose: "auto-commit" },
+        prompt: buildAutoCommitPrompt(),
+      });
+
+      setAutoCommitState({
+        kind: "running",
+        agentId: agent.id,
+        provider,
+        status: agent.status ?? "running",
+        message: "agent 已启动，正在分析 diff 并提交",
+      });
+      navigation?.openAgent({ agentId: agent.id });
+      void refetch();
+
+      const unsubscribe = agent.subscribe((update: { status?: string; requiresAttention?: boolean; attentionReason?: string | null }) => {
+        const status = update.status ?? "running";
+        setAutoCommitState({
+          kind: "running",
+          agentId: agent.id,
+          provider,
+          status,
+          message: update.requiresAttention
+            ? `agent 需要处理 · ${update.attentionReason ?? status}`
+            : `agent ${status}`,
+        });
+      });
+
+      try {
+        const result = await agent.waitForFinish(10 * 60 * 1000);
+        setAutoCommitState({
+          kind: "done",
+          agentId: agent.id,
+          provider,
+          message: result.lastMessage?.trim() || "agent 已结束",
+        });
+        void refetch();
+      } finally {
+        unsubscribe();
+      }
+    } catch (error) {
+      setAutoCommitState({ kind: "error", message: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setAutoCommitPending(false);
+    }
+  }, [autoCommitPending, getAutoCommitInfo, navigation, paseo, refetch]);
+
+  const handleCopyAutoCommitError = useCallback(() => {
+    if (autoCommitState.kind !== "error") return;
+    const clipboard = typeof navigator !== "undefined"
+      ? (navigator as { clipboard?: { writeText(t: string): Promise<void> } }).clipboard
+      : null;
+    if (clipboard) {
+      void clipboard.writeText(autoCommitState.message);
+    }
+    setAutoCommitCopied(true);
+  }, [autoCommitState]);
+
   const { columns, cardWidth } = useMemo(() => {
     if (containerWidth <= 0) return { columns: 1, cardWidth: 0 };
     const CARD_GAP = 16;
@@ -216,6 +352,14 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
   }, [tooltip, surfaceSize, TOOLTIP_EST_HEIGHT]);
 
   const statusDanger = (theme.colors as { statusDanger?: string }).statusDanger ?? "#ef4444";
+  const autoCommitColor =
+    autoCommitState.kind === "error"
+      ? statusDanger
+      : autoCommitState.kind === "done"
+        ? "#22c55e"
+        : autoCommitState.kind === "running" || autoCommitState.kind === "preparing"
+          ? theme.colors.accent
+          : theme.colors.foregroundMuted;
   const tooltipStyles = useMemo(
     () => ({
       container: {
@@ -271,44 +415,105 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
             <Text style={{ color: theme.colors.foreground, fontSize: layout.compact ? 18 : 22, fontWeight: "700" as const }}>
               所有项目
             </Text>
-            <View
-              style={{
-                flexDirection: "row" as const,
-                borderRadius: 6,
-                overflow: "hidden" as const,
-                borderWidth: 1,
-                borderColor: theme.colors.foregroundMuted + "22",
-              }}
-            >
-              {TIME_RANGES.map((r) => {
-                const active = timeRange === r.key;
-                return (
-                  <TouchableOpacity
-                    key={r.key}
-                    onPress={() => setTimeRange(r.key)}
-                    style={{
-                      paddingHorizontal: 7,
-                      paddingVertical: 3,
-                      backgroundColor: active ? theme.colors.accent + "22" : "transparent",
-                    }}
-                  >
-                    <Text
+            <View style={{ flexDirection: "row" as const, alignItems: "center" as const, gap: 8 }}>
+              <TouchableOpacity
+                onPress={() => void handleAutoCommit()}
+                disabled={autoCommitPending}
+                activeOpacity={0.75}
+                style={{
+                  width: 28,
+                  height: 24,
+                  borderRadius: 6,
+                  alignItems: "center" as const,
+                  justifyContent: "center" as const,
+                  borderWidth: 1,
+                  borderColor: autoCommitState.kind === "error" ? statusDanger + "88" : theme.colors.foregroundMuted + "22",
+                  backgroundColor: autoCommitPending ? theme.colors.accent + "18" : "transparent",
+                  opacity: autoCommitPending ? 0.72 : 1,
+                }}
+              >
+                <Icon name={autoCommitPending ? "LoaderCircle" : "GitCommitHorizontal"} size={15} color={autoCommitState.kind === "error" ? statusDanger : theme.colors.foregroundMuted} />
+              </TouchableOpacity>
+              <View
+                style={{
+                  flexDirection: "row" as const,
+                  borderRadius: 6,
+                  overflow: "hidden" as const,
+                  borderWidth: 1,
+                  borderColor: theme.colors.foregroundMuted + "22",
+                }}
+              >
+                {TIME_RANGES.map((r) => {
+                  const active = timeRange === r.key;
+                  return (
+                    <TouchableOpacity
+                      key={r.key}
+                      onPress={() => setTimeRange(r.key)}
                       style={{
-                        color: active ? theme.colors.accent : theme.colors.foregroundMuted,
-                        fontSize: 11,
-                        fontWeight: active ? "600" as const : "400" as const,
+                        paddingHorizontal: 7,
+                        paddingVertical: 3,
+                        backgroundColor: active ? theme.colors.accent + "22" : "transparent",
                       }}
                     >
-                      {r.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+                      <Text
+                        style={{
+                          color: active ? theme.colors.accent : theme.colors.foregroundMuted,
+                          fontSize: 11,
+                          fontWeight: active ? "600" as const : "400" as const,
+                        }}
+                      >
+                        {r.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
             </View>
           </View>
           <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12, marginTop: 2 }}>
             {host.label} · {filteredProjects.length} 个项目 · {totalWorkspaces} 个分支 · {totalAgents} 个 agent
           </Text>
+          {autoCommitState.kind !== "idle" && autoCommitState.kind !== "error" ? (
+            <TouchableOpacity
+              disabled={!("agentId" in autoCommitState) || !autoCommitState.agentId || !navigation}
+              onPress={() => {
+                if ("agentId" in autoCommitState && autoCommitState.agentId) {
+                  navigation?.openAgent({ agentId: autoCommitState.agentId });
+                }
+              }}
+              activeOpacity={0.75}
+              style={{
+                marginTop: 8,
+                alignSelf: "flex-start",
+                maxWidth: "100%",
+                minHeight: 28,
+                paddingHorizontal: 8,
+                paddingVertical: 5,
+                borderRadius: 6,
+                borderWidth: 1,
+                borderColor: autoCommitColor + "66",
+                backgroundColor: autoCommitColor + "14",
+                flexDirection: "row" as const,
+                alignItems: "center" as const,
+              }}
+            >
+              <Icon
+                name={autoCommitState.kind === "done" ? "CheckCircle2" : "LoaderCircle"}
+                size={13}
+                color={autoCommitColor}
+              />
+              <Text
+                numberOfLines={2}
+                style={{ color: autoCommitColor, fontSize: 11, marginLeft: 6, maxWidth: layout.compact ? 260 : 520 }}
+              >
+                {autoCommitState.kind === "running"
+                  ? `一键提交：${autoCommitState.message}`
+                  : autoCommitState.kind === "done"
+                    ? `一键提交完成：${autoCommitState.message}`
+                    : `一键提交：${autoCommitState.message}`}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         <View style={{ flex: 1, minHeight: 0, flexDirection: "row" }}>
@@ -398,6 +603,62 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
             ))}
           </View>
         )}
+        {autoCommitState.kind === "error" ? (
+          <View
+            style={{
+              position: "absolute" as const,
+              top: 12,
+              right: horizontalPadding,
+              width: Math.min(surfaceSize.width > 0 ? surfaceSize.width - horizontalPadding * 2 : 360, 420),
+              maxWidth: "100%",
+              paddingHorizontal: 10,
+              paddingVertical: 9,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: statusDanger + "66",
+              backgroundColor: theme.colors.surface0,
+              shadowColor: "#000",
+              shadowOpacity: 0.18,
+              shadowRadius: 14,
+              shadowOffset: { width: 0, height: 8 },
+              elevation: 20,
+              zIndex: 10000,
+            }}
+          >
+            <View style={{ flexDirection: "row" as const, alignItems: "flex-start" as const }}>
+              <Icon name="TriangleAlert" size={14} color={statusDanger} />
+              <Text style={{ color: statusDanger, fontSize: 12, fontWeight: "600" as const, marginLeft: 7, flex: 1 }}>
+                一键提交失败
+              </Text>
+              <TouchableOpacity onPress={() => setAutoCommitState({ kind: "idle" })} style={{ padding: 2 }}>
+                <Icon name="X" size={13} color={theme.colors.foregroundMuted} />
+              </TouchableOpacity>
+            </View>
+            <Text selectable numberOfLines={4} style={{ color: theme.colors.foreground, fontSize: 12, lineHeight: 17, marginTop: 6 }}>
+              {autoCommitState.message}
+            </Text>
+            <View style={{ flexDirection: "row" as const, justifyContent: "flex-end" as const, marginTop: 8 }}>
+              <TouchableOpacity
+                onPress={handleCopyAutoCommitError}
+                activeOpacity={0.75}
+                style={{
+                  minHeight: 24,
+                  paddingHorizontal: 8,
+                  borderRadius: 6,
+                  borderWidth: 1,
+                  borderColor: theme.colors.foregroundMuted + "2f",
+                  flexDirection: "row" as const,
+                  alignItems: "center" as const,
+                }}
+              >
+                <Icon name={autoCommitCopied ? "Check" : "Copy"} size={12} color={theme.colors.foregroundMuted} />
+                <Text style={{ color: theme.colors.foregroundMuted, fontSize: 11, marginLeft: 5 }}>
+                  {autoCommitCopied ? "已复制" : "复制错误"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
         </View>
 
         {createDialog && (

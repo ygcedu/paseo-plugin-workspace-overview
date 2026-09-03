@@ -220,7 +220,7 @@ export function defaultSelection(
   return entry ? buildSelection(entry) : null;
 }
 
-function providerModelId(selection: ComposerSelection): string {
+export function providerModelId(selection: ComposerSelection): string {
   return selection.modelId ? `${selection.providerId}/${selection.modelId}` : selection.providerId;
 }
 
