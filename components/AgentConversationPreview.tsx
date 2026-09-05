@@ -8,10 +8,12 @@ import {
   type ChatModelRunOptions,
   type ThreadMessageLike,
 } from "@assistant-ui/react-native";
-import type { PluginSurfaceProps } from "@getpaseo/plugin";
+import { useRpc, type PluginSurfaceProps } from "@getpaseo/plugin";
 import { Icon } from "@getpaseo/plugin/react-native";
 import type { PaseoClient } from "./workspace-creator-shared";
 import type { AgentEntry } from "../overview.types";
+import { autoCommitStartRpc, autoCommitStatusRpc } from "../shared/auto-commit";
+import { useTooltip } from "./Tooltip";
 import type { AgentTimelineEntry } from "./agent-conversation-types";
 import { AgentConversationTimeline } from "./AgentConversationTimeline";
 import { ResizeHandle } from "./ResizeHandle";
@@ -116,6 +118,65 @@ function selectionFromAgent(snapshot: ProviderSnapshot, agent: AgentEntry | Reco
   };
 }
 
+type AutoCommitState =
+  | { kind: "idle" }
+  | { kind: "preparing"; message: string }
+  | { kind: "running"; taskId: string; message: string }
+  | { kind: "done"; taskId: string; message: string }
+  | { kind: "error"; message: string; taskId?: string };
+
+function QuickActionButton({
+  icon,
+  color,
+  disabled,
+  tooltip,
+  accessibilityLabel,
+  onPress,
+  style,
+}: {
+  icon: string;
+  color: string;
+  disabled?: boolean;
+  tooltip: Array<{ key: string; value: string }>;
+  accessibilityLabel: string;
+  onPress: () => void;
+  style: ViewStyle;
+}) {
+  const tooltipCtx = useTooltip();
+  const buttonRef = useRef<View | null>(null);
+
+  const showTooltip = useCallback(() => {
+    if (!tooltipCtx || !buttonRef.current) return;
+    buttonRef.current.measureInWindow((x, y, width, height) => {
+      tooltipCtx.show({
+        x: x + width,
+        y: y + height,
+        lines: tooltip,
+      });
+    });
+  }, [tooltip, tooltipCtx]);
+
+  const hideTooltip = useCallback(() => {
+    tooltipCtx?.hide();
+  }, [tooltipCtx]);
+
+  return (
+    <Pressable
+      ref={buttonRef}
+      accessibilityLabel={accessibilityLabel}
+      onPress={onPress}
+      disabled={disabled}
+      style={[style, disabled && { opacity: 0.55 }]}
+      {...({
+        onMouseEnter: showTooltip,
+        onMouseLeave: hideTooltip,
+      } as Record<string, unknown>)}
+    >
+      <Icon name={icon} size={14} color={color} />
+    </Pressable>
+  );
+}
+
 export function AgentConversationPreview({
   agent,
   workspaceDirectory,
@@ -145,6 +206,12 @@ export function AgentConversationPreview({
   const [snapshot, setSnapshot] = useState<ProviderSnapshot | null>(null);
   const [selection, setSelection] = useState<ComposerSelection | null>(null);
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
+  const startAutoCommit = useRpc(autoCommitStartRpc);
+  const getAutoCommitStatus = useRpc(autoCommitStatusRpc);
+  const [autoCommitPending, setAutoCommitPending] = useState(false);
+  const [autoCommitState, setAutoCommitState] = useState<AutoCommitState>({ kind: "idle" });
+  const [autoCommitCopied, setAutoCommitCopied] = useState(false);
+  const commitCwd = workspaceDirectory ?? agent.cwd;
 
   // Load providers from agent's workspace
   useEffect(() => {
@@ -233,6 +300,66 @@ export function AgentConversationPreview({
   }, [currentProvider, handle]);
 
   const isAgentRunning = liveStatus === "running";
+
+  useEffect(() => {
+    if (autoCommitState.kind !== "error") return;
+    setAutoCommitCopied(false);
+    const timer = setTimeout(() => setAutoCommitState({ kind: "idle" }), 8000);
+    return () => clearTimeout(timer);
+  }, [autoCommitState]);
+
+  const handleAutoCommit = useCallback(async () => {
+    if (autoCommitPending) return;
+    if (!commitCwd) {
+      setAutoCommitState({ kind: "error", message: "当前 agent 没有可用工作目录" });
+      return;
+    }
+
+    setAutoCommitPending(true);
+    setAutoCommitCopied(false);
+    setAutoCommitState({ kind: "preparing", message: "正在启动 Pi 独立进程" });
+
+    try {
+      const { taskId } = await startAutoCommit({ cwd: commitCwd });
+      setAutoCommitState({ kind: "running", taskId, message: "Pi 已启动，正在提交" });
+
+      for (;;) {
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+        const status = await getAutoCommitStatus({ taskId });
+        const message = status.output.trim().split("\n").filter(Boolean).slice(-1)[0] ?? "Pi 正在运行";
+        if (status.status === "running") {
+          setAutoCommitState({ kind: "running", taskId, message });
+          continue;
+        }
+        if (status.status === "done") {
+          setAutoCommitState({ kind: "done", taskId, message: message || "Pi 已完成提交" });
+          void refresh();
+          return;
+        }
+        setAutoCommitState({
+          kind: "error",
+          taskId,
+          message: [status.error, status.output].filter(Boolean).join("\n").trim() || "Pi 提交失败",
+        });
+        return;
+      }
+    } catch (commitError) {
+      setAutoCommitState({ kind: "error", message: commitError instanceof Error ? commitError.message : String(commitError) });
+    } finally {
+      setAutoCommitPending(false);
+    }
+  }, [autoCommitPending, commitCwd, getAutoCommitStatus, refresh, startAutoCommit]);
+
+  const handleCopyAutoCommitError = useCallback(() => {
+    if (autoCommitState.kind !== "error") return;
+    const clipboard = typeof navigator !== "undefined"
+      ? (navigator as { clipboard?: { writeText(t: string): Promise<void> } }).clipboard
+      : null;
+    if (clipboard) {
+      void clipboard.writeText(autoCommitState.message);
+    }
+    setAutoCommitCopied(true);
+  }, [autoCommitState]);
 
   const handleCancel = useCallback(async () => {
     if (isCancelling) return;
@@ -327,7 +454,64 @@ export function AgentConversationPreview({
       alignItems: "center",
       justifyContent: "center",
     } as ViewStyle,
+    autoCommitBar: {
+      marginHorizontal: 10,
+      marginBottom: 8,
+      minHeight: 32,
+      paddingHorizontal: 6,
+      paddingVertical: 4,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.foregroundMuted + "22",
+      backgroundColor: colors.foregroundMuted + "0d",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    } as ViewStyle,
+    quickActionButton: {
+      width: 24,
+      height: 24,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: colors.foregroundMuted + "2f",
+      alignItems: "center",
+      justifyContent: "center",
+    } as ViewStyle,
+    toastCopyButton: {
+      height: 26,
+      paddingHorizontal: 8,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: colors.foregroundMuted + "2f",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+    } as ViewStyle,
+    autoCommitToast: {
+      marginHorizontal: 10,
+      marginBottom: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 9,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.statusDanger + "66",
+      backgroundColor: colors.surface0,
+      shadowColor: "#000",
+      shadowOpacity: 0.18,
+      shadowRadius: 14,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: 20,
+    } as ViewStyle,
   }), [colors, composerStyles]);
+
+  const autoCommitColor =
+    autoCommitState.kind === "error"
+      ? colors.statusDanger
+      : autoCommitState.kind === "done"
+        ? "#22c55e"
+        : autoCommitState.kind === "running" || autoCommitState.kind === "preparing"
+          ? colors.accent
+          : colors.foregroundMuted;
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
@@ -352,6 +536,45 @@ export function AgentConversationPreview({
         {error ? <Text style={{ color: colors.statusDanger, padding: 16 }}>{error}</Text> : null}
         <ThreadPrimitive.Root style={{ flex: 1 }}>
           <AgentConversationTimeline entries={entries} theme={theme} />
+          {autoCommitState.kind === "error" ? (
+            <View style={styles.autoCommitToast}>
+              <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
+                <Icon name="TriangleAlert" size={14} color={colors.statusDanger} />
+                <Text style={{ color: colors.statusDanger, fontSize: 12, fontWeight: "600", marginLeft: 7, flex: 1 }}>
+                  一键提交失败
+                </Text>
+                <Pressable onPress={() => setAutoCommitState({ kind: "idle" })} style={{ padding: 2 }}>
+                  <Icon name="X" size={13} color={colors.foregroundMuted} />
+                </Pressable>
+              </View>
+              <Text selectable numberOfLines={4} style={{ color: colors.foreground, fontSize: 12, lineHeight: 17, marginTop: 6 }}>
+                {autoCommitState.message}
+              </Text>
+              <View style={{ flexDirection: "row", justifyContent: "flex-end", marginTop: 8 }}>
+                <Pressable onPress={handleCopyAutoCommitError} style={styles.toastCopyButton}>
+                  <Icon name={autoCommitCopied ? "Check" : "Copy"} size={12} color={colors.foregroundMuted} />
+                  <Text style={{ color: colors.foregroundMuted, fontSize: 11 }}>
+                    {autoCommitCopied ? "已复制" : "复制错误"}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
+          <View style={styles.autoCommitBar}>
+            <QuickActionButton
+              icon={autoCommitPending ? "LoaderCircle" : autoCommitState.kind === "done" ? "CheckCircle2" : "GitCommitHorizontal"}
+              color={autoCommitColor}
+              disabled={autoCommitPending || !commitCwd}
+              tooltip={[
+                { key: "Action", value: "提交代码" },
+                { key: "Status", value: autoCommitState.kind === "idle" ? "Ready" : autoCommitState.message },
+                { key: "Directory", value: commitCwd ?? "无工作目录" },
+              ]}
+              accessibilityLabel="提交当前 Agent 工作目录改动"
+              onPress={() => void handleAutoCommit()}
+              style={styles.quickActionButton}
+            />
+          </View>
           <SharedComposerInput
             selection={selection}
             snapshot={snapshot}

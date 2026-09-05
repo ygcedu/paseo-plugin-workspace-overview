@@ -1,7 +1,6 @@
 import { type PluginSurfaceProps, usePaseo, useRpc } from "@getpaseo/plugin";
-import { Icon } from "@getpaseo/plugin/react-native";
 import { useQuery } from "@tanstack/react-query";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { ScrollView, Text, TouchableOpacity, View, type LayoutChangeEvent, type ViewStyle, type TextStyle } from "react-native";
 
 import { TooltipProvider, useTooltip } from "./components/Tooltip";
@@ -12,7 +11,6 @@ import { useFilter, TIME_RANGES, type TimeRange } from "./hooks/useFilter";
 import { type AgentEntry, type TooltipState, type WorkspaceEntry } from "./overview.types";
 import { projectIconRpc } from "./shared/project-icon";
 import { gitBranchesRpc } from "./shared/git-branches";
-import { autoCommitStartRpc, autoCommitStatusRpc } from "./shared/auto-commit";
 import { AgentConversationPreview } from "./components/AgentConversationPreview";
 
 function resolveProjectSourceDirectory(workspaces: WorkspaceEntry[]): string | undefined {
@@ -34,13 +32,6 @@ function resolveProjectBranchFallbacks(workspaces: WorkspaceEntry[]) {
     detail: "当前 Workspace 分支",
   }));
 }
-
-type AutoCommitState =
-  | { kind: "idle" }
-  | { kind: "preparing"; message: string }
-  | { kind: "running"; taskId: string; message: string }
-  | { kind: "done"; taskId: string; message: string }
-  | { kind: "error"; message: string; taskId?: string };
 
 export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSurfaceProps) {
   const [containerWidth, setContainerWidth] = useState(0);
@@ -105,11 +96,6 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
   );
   const getProjectIcon = useRpc(projectIconRpc);
   const getGitBranches = useRpc(gitBranchesRpc);
-  const startAutoCommit = useRpc(autoCommitStartRpc);
-  const getAutoCommitStatus = useRpc(autoCommitStatusRpc);
-  const [autoCommitPending, setAutoCommitPending] = useState(false);
-  const [autoCommitState, setAutoCommitState] = useState<AutoCommitState>({ kind: "idle" });
-  const [autoCommitCopied, setAutoCommitCopied] = useState(false);
   const { data: projectIcons = new Map<string, string | null>() } = useQuery({
     queryKey: ["workspace-overview-project-icons", host.id, createProjectOptionsWithoutIcons.map((item) => item.projectId)],
     queryFn: async () => {
@@ -175,61 +161,6 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
     setCardExpanded((prev) => ({ ...prev, [projectId]: !currentEffective }));
   }, []);
 
-  useEffect(() => {
-    if (autoCommitState.kind !== "error") return;
-    setAutoCommitCopied(false);
-    const timer = setTimeout(() => setAutoCommitState({ kind: "idle" }), 8000);
-    return () => clearTimeout(timer);
-  }, [autoCommitState]);
-
-  const handleAutoCommit = useCallback(async () => {
-    if (autoCommitPending) return;
-    setAutoCommitPending(true);
-    setAutoCommitCopied(false);
-    setAutoCommitState({ kind: "preparing", message: "正在启动 Pi 独立进程" });
-
-    try {
-      const { taskId } = await startAutoCommit({});
-      setAutoCommitState({ kind: "running", taskId, message: "Pi 已启动，正在提交" });
-
-      for (;;) {
-        await new Promise((resolve) => setTimeout(resolve, 1200));
-        const status = await getAutoCommitStatus({ taskId });
-        const message = status.output.trim().split("\n").filter(Boolean).slice(-1)[0] ?? "Pi 正在运行";
-        if (status.status === "running") {
-          setAutoCommitState({ kind: "running", taskId, message });
-          continue;
-        }
-        if (status.status === "done") {
-          setAutoCommitState({ kind: "done", taskId, message: message || "Pi 已完成提交" });
-          void refetch();
-          return;
-        }
-        setAutoCommitState({
-          kind: "error",
-          taskId,
-          message: [status.error, status.output].filter(Boolean).join("\n").trim() || "Pi 提交失败",
-        });
-        return;
-      }
-    } catch (error) {
-      setAutoCommitState({ kind: "error", message: error instanceof Error ? error.message : String(error) });
-    } finally {
-      setAutoCommitPending(false);
-    }
-  }, [autoCommitPending, getAutoCommitStatus, refetch, startAutoCommit]);
-
-  const handleCopyAutoCommitError = useCallback(() => {
-    if (autoCommitState.kind !== "error") return;
-    const clipboard = typeof navigator !== "undefined"
-      ? (navigator as { clipboard?: { writeText(t: string): Promise<void> } }).clipboard
-      : null;
-    if (clipboard) {
-      void clipboard.writeText(autoCommitState.message);
-    }
-    setAutoCommitCopied(true);
-  }, [autoCommitState]);
-
   const { columns, cardWidth } = useMemo(() => {
     if (containerWidth <= 0) return { columns: 1, cardWidth: 0 };
     const CARD_GAP = 16;
@@ -285,14 +216,6 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
   }, [tooltip, surfaceSize, TOOLTIP_EST_HEIGHT]);
 
   const statusDanger = (theme.colors as { statusDanger?: string }).statusDanger ?? "#ef4444";
-  const autoCommitColor =
-    autoCommitState.kind === "error"
-      ? statusDanger
-      : autoCommitState.kind === "done"
-        ? "#22c55e"
-        : autoCommitState.kind === "running" || autoCommitState.kind === "preparing"
-          ? theme.colors.accent
-          : theme.colors.foregroundMuted;
   const tooltipStyles = useMemo(
     () => ({
       container: {
@@ -348,25 +271,6 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
             <Text style={{ color: theme.colors.foreground, fontSize: layout.compact ? 18 : 22, fontWeight: "700" as const }}>
               所有项目
             </Text>
-            <View style={{ flexDirection: "row" as const, alignItems: "center" as const, gap: 8 }}>
-              <TouchableOpacity
-                onPress={() => void handleAutoCommit()}
-                disabled={autoCommitPending}
-                activeOpacity={0.75}
-                style={{
-                  width: 28,
-                  height: 24,
-                  borderRadius: 6,
-                  alignItems: "center" as const,
-                  justifyContent: "center" as const,
-                  borderWidth: 1,
-                  borderColor: autoCommitState.kind === "error" ? statusDanger + "88" : theme.colors.foregroundMuted + "22",
-                  backgroundColor: autoCommitPending ? theme.colors.accent + "18" : "transparent",
-                  opacity: autoCommitPending ? 0.72 : 1,
-                }}
-              >
-                <Icon name={autoCommitPending ? "LoaderCircle" : "GitCommitHorizontal"} size={15} color={autoCommitState.kind === "error" ? statusDanger : theme.colors.foregroundMuted} />
-              </TouchableOpacity>
               <View
                 style={{
                   flexDirection: "row" as const,
@@ -401,47 +305,10 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
                   );
                 })}
               </View>
-            </View>
           </View>
           <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12, marginTop: 2 }}>
             {host.label} · {filteredProjects.length} 个项目 · {totalWorkspaces} 个分支 · {totalAgents} 个 agent
           </Text>
-          {autoCommitState.kind !== "idle" && autoCommitState.kind !== "error" ? (
-            <TouchableOpacity
-              disabled
-              activeOpacity={0.75}
-              style={{
-                marginTop: 8,
-                alignSelf: "flex-start",
-                maxWidth: "100%",
-                minHeight: 28,
-                paddingHorizontal: 8,
-                paddingVertical: 5,
-                borderRadius: 6,
-                borderWidth: 1,
-                borderColor: autoCommitColor + "66",
-                backgroundColor: autoCommitColor + "14",
-                flexDirection: "row" as const,
-                alignItems: "center" as const,
-              }}
-            >
-              <Icon
-                name={autoCommitState.kind === "done" ? "CheckCircle2" : "LoaderCircle"}
-                size={13}
-                color={autoCommitColor}
-              />
-              <Text
-                numberOfLines={2}
-                style={{ color: autoCommitColor, fontSize: 11, marginLeft: 6, maxWidth: layout.compact ? 260 : 520 }}
-              >
-                {autoCommitState.kind === "running"
-                  ? `一键提交：${autoCommitState.message}`
-                  : autoCommitState.kind === "done"
-                    ? `一键提交完成：${autoCommitState.message}`
-                    : `一键提交：${autoCommitState.message}`}
-              </Text>
-            </TouchableOpacity>
-          ) : null}
         </View>
 
         <View style={{ flex: 1, minHeight: 0, flexDirection: "row" }}>
@@ -531,62 +398,6 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
             ))}
           </View>
         )}
-        {autoCommitState.kind === "error" ? (
-          <View
-            style={{
-              position: "absolute" as const,
-              top: 12,
-              right: horizontalPadding,
-              width: Math.min(surfaceSize.width > 0 ? surfaceSize.width - horizontalPadding * 2 : 360, 420),
-              maxWidth: "100%",
-              paddingHorizontal: 10,
-              paddingVertical: 9,
-              borderRadius: 8,
-              borderWidth: 1,
-              borderColor: statusDanger + "66",
-              backgroundColor: theme.colors.surface0,
-              shadowColor: "#000",
-              shadowOpacity: 0.18,
-              shadowRadius: 14,
-              shadowOffset: { width: 0, height: 8 },
-              elevation: 20,
-              zIndex: 10000,
-            }}
-          >
-            <View style={{ flexDirection: "row" as const, alignItems: "flex-start" as const }}>
-              <Icon name="TriangleAlert" size={14} color={statusDanger} />
-              <Text style={{ color: statusDanger, fontSize: 12, fontWeight: "600" as const, marginLeft: 7, flex: 1 }}>
-                一键提交失败
-              </Text>
-              <TouchableOpacity onPress={() => setAutoCommitState({ kind: "idle" })} style={{ padding: 2 }}>
-                <Icon name="X" size={13} color={theme.colors.foregroundMuted} />
-              </TouchableOpacity>
-            </View>
-            <Text selectable numberOfLines={4} style={{ color: theme.colors.foreground, fontSize: 12, lineHeight: 17, marginTop: 6 }}>
-              {autoCommitState.message}
-            </Text>
-            <View style={{ flexDirection: "row" as const, justifyContent: "flex-end" as const, marginTop: 8 }}>
-              <TouchableOpacity
-                onPress={handleCopyAutoCommitError}
-                activeOpacity={0.75}
-                style={{
-                  minHeight: 24,
-                  paddingHorizontal: 8,
-                  borderRadius: 6,
-                  borderWidth: 1,
-                  borderColor: theme.colors.foregroundMuted + "2f",
-                  flexDirection: "row" as const,
-                  alignItems: "center" as const,
-                }}
-              >
-                <Icon name={autoCommitCopied ? "Check" : "Copy"} size={12} color={theme.colors.foregroundMuted} />
-                <Text style={{ color: theme.colors.foregroundMuted, fontSize: 11, marginLeft: 5 }}>
-                  {autoCommitCopied ? "已复制" : "复制错误"}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : null}
         </View>
 
         {createDialog && (

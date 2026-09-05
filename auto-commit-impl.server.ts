@@ -120,6 +120,28 @@ export async function readAutoCommitInfo(): Promise<{
   };
 }
 
+async function readAutoCommitInfoForDirectory(projectDirectory: string): Promise<{
+  cwd: string;
+  currentBranch: string | null;
+  hasChanges: boolean;
+  status: string;
+  recentMessages: string[];
+}> {
+  const [status, currentBranch, log] = await Promise.all([
+    runGit(projectDirectory, ["status", "--short"]),
+    tryGit(projectDirectory, ["symbolic-ref", "--quiet", "--short", "HEAD"]),
+    tryGit(projectDirectory, ["log", "--format=%s", "-8"]),
+  ]);
+
+  return {
+    cwd: projectDirectory,
+    currentBranch,
+    hasChanges: status.length > 0,
+    status,
+    recentMessages: (log ?? "").split("\n").filter(Boolean),
+  };
+}
+
 function buildAutoCommitPrompt() {
   return [
     "请帮我提交当前仓库里的待提交改动。",
@@ -137,8 +159,8 @@ function appendTaskOutput(task: AutoCommitTask, chunk: Buffer | string) {
   task.output = `${task.output}${chunk.toString()}`.slice(-20_000);
 }
 
-export async function startAutoCommitTask(): Promise<{ taskId: string; cwd: string }> {
-  const info = await readAutoCommitInfo();
+export async function startAutoCommitTask({ cwd }: { cwd: string }): Promise<{ taskId: string; cwd: string }> {
+  const info = await readAutoCommitInfoForDirectory(cwd);
   if (!info.hasChanges) {
     throw new Error("没有待提交改动");
   }

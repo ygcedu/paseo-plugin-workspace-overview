@@ -15,7 +15,7 @@ export const autoCommitInfoRpc = defineRpc({
 
 export const autoCommitStartRpc = defineRpc({
   name: "auto_commit_start",
-  input: z.object({}),
+  input: z.object({ cwd: z.string().min(1) }),
   output: z.object({
     taskId: z.string(),
     cwd: z.string(),
