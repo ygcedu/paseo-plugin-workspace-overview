@@ -21,6 +21,10 @@ function markdownBlocks(text: string, styles: ReturnType<typeof createStyles>): 
     }
     if (code) { code.push(line); return; }
     if (!line.trim()) { nodes.push(<View key={`gap-${index}`} style={styles.gap} />); return; }
+    if (/^\s{0,3}(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
+      nodes.push(<View key={`rule-${index}`} style={styles.rule} />);
+      return;
+    }
     const heading = /^(#{1,3})\s+(.+)$/.exec(line);
     if (heading) {
       const headingStyle = heading[1].length === 1 ? styles.heading1 : heading[1].length === 2 ? styles.heading2 : styles.heading3;
@@ -55,6 +59,7 @@ function createStyles(theme: PluginSurfaceProps["theme"]) {
     marker: { width: 24, color: theme.colors.foregroundMuted, fontSize: 15, lineHeight: 22 } as TextStyle,
     listText: { flex: 1, color: theme.colors.foreground, fontSize: 15, lineHeight: 22 } as TextStyle,
     quote: { borderLeftWidth: 3, borderLeftColor: theme.colors.foregroundMuted + "66", paddingLeft: 12, paddingVertical: 2, marginVertical: 5 } as ViewStyle,
+    rule: { height: 1, backgroundColor: theme.colors.foregroundMuted + "33", marginVertical: 14 } as ViewStyle,
     gap: { height: 10 } as ViewStyle,
   };
 }
