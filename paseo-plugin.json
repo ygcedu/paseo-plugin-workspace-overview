@@ -1,3 +1,4 @@
 {
-  "id": "workspace-overview"
+  "id": "workspace-overview",
+  "requirements": { "paseo": ">=0.8.0" }
 }
