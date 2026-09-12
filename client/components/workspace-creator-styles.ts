@@ -1,6 +1,7 @@
 import { Platform, StyleSheet, type TextStyle, type ViewStyle } from "react-native";
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
-import { MAX_MENU_HEIGHT, opaqueSurfaceColor } from "./workspace-creator-shared";
+import { MAX_MENU_HEIGHT } from "../workspace-creator/constants";
+import { opaqueSurfaceColor } from "../workspace-creator/ui-utils";
 
 export function createComposerStyles(theme: PluginSurfaceProps["theme"]) {
   const colors = theme.colors;

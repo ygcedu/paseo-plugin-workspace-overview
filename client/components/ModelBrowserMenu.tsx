@@ -3,7 +3,9 @@ import { Pressable, Text, View } from "react-native";
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { Icon, ScrollView, TextInput } from "@getpaseo/plugin/client/react-native";
 import { ProviderBrandIcon } from "./ProviderBrandIcon";
-import { opaqueSurfaceColor, selectableModels, type ComposerSelection, type ProviderEntry } from "./workspace-creator-shared";
+import { selectableModels } from "../workspace-creator/provider-selection";
+import { opaqueSurfaceColor } from "../workspace-creator/ui-utils";
+import type { ComposerSelection, ProviderEntry } from "../workspace-creator/types";
 import { createMenuStyles } from "./workspace-creator-styles";
 
 export function ModelBrowserMenu({

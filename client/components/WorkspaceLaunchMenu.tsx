@@ -2,10 +2,10 @@ import React, { useMemo } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { Icon, ScrollView } from "@getpaseo/plugin/client/react-native";
-import { opaqueSurfaceColor } from "./workspace-creator-shared";
+import { opaqueSurfaceColor } from "../workspace-creator/ui-utils";
 import { createMenuStyles } from "./workspace-creator-styles";
 import { ProviderBrandIcon } from "./ProviderBrandIcon";
-import type { LaunchTarget, TerminalProfile } from "./workspace-creator-shared";
+import type { LaunchTarget, TerminalProfile } from "../workspace-creator/types";
 
 export function WorkspaceLaunchMenu({
   target,

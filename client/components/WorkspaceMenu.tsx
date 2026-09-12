@@ -2,7 +2,9 @@ import React, { useMemo, useState } from "react";
 import { Pressable, Text, useWindowDimensions, View } from "react-native";
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { Icon, ScrollView, TextInput } from "@getpaseo/plugin/client/react-native";
-import { MAX_MENU_HEIGHT, MENU_WIDTH_BY_KIND, opaqueSurfaceColor, type MenuOption, type OpenMenu } from "./workspace-creator-shared";
+import { MAX_MENU_HEIGHT, MENU_WIDTH_BY_KIND } from "../workspace-creator/constants";
+import { opaqueSurfaceColor } from "../workspace-creator/ui-utils";
+import type { MenuOption, OpenMenu } from "../workspace-creator/types";
 import { createMenuStyles } from "./workspace-creator-styles";
 import { ProjectIcon } from "./ProjectIcon";
 

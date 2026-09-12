@@ -6,15 +6,17 @@ import { ModelBrowserMenu } from "./ModelBrowserMenu";
 import { Menu } from "./WorkspaceMenu";
 import { SelectControl } from "./WorkspaceSelectControl";
 import {
-  formatControlValue,
   providerById,
   readyProviders,
   selectableModels,
   defaultModel,
-  type ComposerSelection,
-  type OpenMenu,
-  type ProviderSnapshot,
-} from "./workspace-creator-shared";
+} from "../workspace-creator/provider-selection";
+import { formatControlValue } from "../workspace-creator/ui-utils";
+import type {
+  ComposerSelection,
+  OpenMenu,
+  ProviderSnapshot,
+} from "../workspace-creator/types";
 import { createComposerStyles } from "./workspace-creator-styles";
 
 function getColors(theme: PluginSurfaceProps["theme"]) {

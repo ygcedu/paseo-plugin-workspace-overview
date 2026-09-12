@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Pressable, Text, View, type TextStyle, type ViewStyle } from "react-native";
 import { useRpc, type PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
-import type { PaseoClient } from "./workspace-creator-shared";
+import type { ComposerSelection, PaseoClient, ProviderSnapshot } from "../workspace-creator/types";
 import type { AgentEntry } from "../../shared/overview-types";
 import type { AgentTimelineEntry } from "./agent-conversation-types";
 import { AgentConversationTimeline } from "./AgentConversationTimeline";
@@ -10,7 +10,7 @@ import { ResizeHandle } from "./ResizeHandle";
 import { createComposerStyles } from "./workspace-creator-styles";
 import { SharedComposerInput } from "./SharedComposerInput";
 import { agentConfigSetRpc } from "../../shared/agent-config";
-import { buildSelection, type ComposerSelection, type ProviderSnapshot } from "./workspace-creator-shared";
+import { buildSelection } from "../workspace-creator/provider-selection";
 import { useAutoCommit } from "../agent-preview/useAutoCommit";
 import { AutoCommitErrorToast, QuickActionButton } from "../agent-preview/PreviewActions";
 

@@ -4,7 +4,7 @@ import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import { Badge } from "./WorkspaceBadge";
 import { Menu } from "./WorkspaceMenu";
-import { type ComposerSelection, type Isolation, type LaunchTarget, type MenuOption, type OpenMenu, type ProviderSnapshot, type TerminalProfile, type WorkspaceProjectOption } from "./workspace-creator-shared";
+import type { ComposerSelection, Isolation, LaunchTarget, MenuOption, OpenMenu, ProviderSnapshot, TerminalProfile, WorkspaceProjectOption } from "../workspace-creator/types";
 import { createComposerStyles } from "./workspace-creator-styles";
 import { ProjectIcon } from "./ProjectIcon";
 import { ProviderBrandIcon } from "./ProviderBrandIcon";

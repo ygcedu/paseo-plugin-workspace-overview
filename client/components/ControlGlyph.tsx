@@ -1,6 +1,6 @@
 import React from "react";
 import { Icon } from "@getpaseo/plugin/client/react-native";
-import type { OpenMenu } from "./workspace-creator-shared";
+import type { OpenMenu } from "../workspace-creator/types";
 
 export function ControlGlyph({ kind, color }: { kind: Exclude<OpenMenu, null>; color: string }) {
   const names: Record<Exclude<OpenMenu, null>, string> = {

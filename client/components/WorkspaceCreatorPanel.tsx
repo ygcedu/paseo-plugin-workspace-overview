@@ -4,7 +4,9 @@ import { Icon } from "@getpaseo/plugin/client/react-native";
 import { Pressable, Text, View, type TextStyle, type ViewStyle } from "react-native";
 import { WorkspaceCreateComposer } from "./WorkspaceCreateComposer";
 import { ResizeHandle } from "./ResizeHandle";
-import { buildSelection, submitWorkspacePrompt, providerById, selectableModels, type Isolation, type LaunchTarget, type OpenMenu, type WorkspaceCreatorPanelProps } from "./workspace-creator-shared";
+import { buildSelection, providerById, selectableModels } from "../workspace-creator/provider-selection";
+import { submitWorkspacePrompt } from "../workspace-creator/submit-workspace";
+import type { Isolation, LaunchTarget, OpenMenu, WorkspaceCreatorPanelProps } from "../workspace-creator/types";
 import { terminalLaunchRpc } from "../../shared/terminal-launch";
 import { useProviderCatalog, useTerminalProfiles } from "../workspace-creator/useProviderCatalog";
 
