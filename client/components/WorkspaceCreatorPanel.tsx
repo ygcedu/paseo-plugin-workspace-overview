@@ -21,6 +21,8 @@ export function WorkspaceCreatorPanel({
   paseo,
   onClose,
   onCreate,
+  initialPanelWidth = 480,
+  maxPanelWidth = 800,
   theme,
   layout,
 }: WorkspaceCreatorPanelProps) {
@@ -253,9 +255,9 @@ export function WorkspaceCreatorPanel({
       theme={theme}
       side="left"
       variant="grip"
-      initialWidth={480}
+      initialWidth={initialPanelWidth}
       minWidth={360}
-      maxWidth={800}
+      maxWidth={maxPanelWidth}
       style={panelStyles.panel}
     >
       {content}

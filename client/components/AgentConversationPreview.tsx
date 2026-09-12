@@ -37,6 +37,8 @@ export function AgentConversationPreview({
   theme,
   onClose,
   onOpenFull,
+  initialPanelWidth = 480,
+  maxPanelWidth = 800,
 }: {
   agent: AgentEntry;
   workspaceDirectory?: string;
@@ -44,6 +46,8 @@ export function AgentConversationPreview({
   theme: PluginSurfaceProps["theme"];
   onClose: () => void;
   onOpenFull: () => void;
+  initialPanelWidth?: number;
+  maxPanelWidth?: number;
 }) {
   const handle = useMemo(() => paseo.agents.ref(agent.id), [agent.id, paseo]);
   const [entries, setEntries] = useState<AgentTimelineEntry[]>([]);
@@ -281,9 +285,9 @@ export function AgentConversationPreview({
         theme={theme}
         side="left"
         variant="grip"
-        initialWidth={480}
+        initialWidth={initialPanelWidth}
         minWidth={360}
-        maxWidth={800}
+        maxWidth={maxPanelWidth}
         style={styles.panel}
       >
         <View style={styles.header}>
