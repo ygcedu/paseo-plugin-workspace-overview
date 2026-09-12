@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Text } from "react-native";
 import { useRpc } from "@getpaseo/plugin/client";
+import { Icon } from "@getpaseo/plugin/client/react-native";
+import { Pressable, Text, View, type TextStyle, type ViewStyle } from "react-native";
 import { WorkspaceCreateComposer } from "./WorkspaceCreateComposer";
+import { ResizeHandle } from "./ResizeHandle";
 import { buildSelection, submitWorkspacePrompt, defaultSelection, providerById, PROVIDER_READY_TIMEOUT_MS, readPaseoProviderModelPreference, selectableModels, type ComposerSelection, type Isolation, type LaunchTarget, type OpenMenu, type ProviderSnapshot, type TerminalProfile, type WorkspaceCreatorPanelProps } from "./workspace-creator-shared";
 import { terminalLaunchRpc } from "../../shared/terminal-launch";
 
@@ -24,6 +26,7 @@ export function WorkspaceCreatorPanel({
   onClose,
   onCreate,
   theme,
+  layout,
 }: WorkspaceCreatorPanelProps) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -179,7 +182,7 @@ export function WorkspaceCreatorPanel({
   );
 
   const submit = useCallback(async () => {
-    await submitWorkspacePrompt({
+    const submitted = await submitWorkspacePrompt({
         project: selectedProject.projectDirectory ? selectedProject : null,
         isolation,
         baseBranch,
@@ -199,7 +202,7 @@ export function WorkspaceCreatorPanel({
           onClose();
         },
     }, prompt);
-    setPrompt("");
+    if (submitted) setPrompt("");
   },
     [baseBranch, hostId, isolation, launchTarget, launchTerminal, navigation, onClose, onCreate, paseo, prompt, selectedProject, selection, snapshot, terminalProfiles],
   );
@@ -211,37 +214,102 @@ export function WorkspaceCreatorPanel({
     onClose();
   }, [onClose, pending]);
 
+  const panelStyles = useMemo(() => ({
+    panel: {
+      height: "100%",
+      borderLeftWidth: 1,
+      borderLeftColor: theme.colors.foregroundMuted + "22",
+      backgroundColor: theme.colors.surface0,
+    } as ViewStyle,
+    header: {
+      height: 54,
+      paddingHorizontal: 14,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.foregroundMuted + "22",
+    } as ViewStyle,
+    title: {
+      flex: 1,
+      color: theme.colors.foreground,
+      fontSize: 14,
+      fontWeight: "600",
+    } as TextStyle,
+    closeButton: {
+      width: 30,
+      height: 30,
+      alignItems: "center",
+      justifyContent: "center",
+    } as ViewStyle,
+    body: {
+      flex: 1,
+      justifyContent: "flex-end",
+      paddingHorizontal: layout.compact ? 12 : 20,
+      paddingBottom: layout.compact ? 12 : 20,
+    } as ViewStyle,
+  }), [layout.compact, theme]);
+
+  const content = (
+    <>
+      <View style={panelStyles.header}>
+        <Icon name="Plus" size={17} color={theme.colors.foregroundMuted} />
+        <Text numberOfLines={1} style={panelStyles.title}>新建 Workspace</Text>
+        <Pressable accessibilityLabel="关闭新建 Workspace" disabled={pending} onPress={close} style={panelStyles.closeButton}>
+          <Icon name="X" size={16} color={theme.colors.foregroundMuted} />
+        </Pressable>
+      </View>
+      <View style={panelStyles.body}>
+        <WorkspaceCreateComposer
+          project={selectedProject.projectDirectory ? selectedProject : null}
+          hostLabel={hostLabel}
+          projects={projects}
+          isolation={isolation}
+          baseBranch={baseBranch}
+          pending={pending}
+          error={error}
+          providerLoading={providerLoading}
+          snapshot={snapshot}
+          selection={selection}
+          launchTarget={launchTarget}
+          terminalProfiles={terminalProfiles}
+          openMenu={openMenu}
+          onToggleMenu={setOpenMenu}
+          onSelectProject={selectProject}
+          onSelectIsolation={selectIsolation}
+          onSelectBase={selectBase}
+          onSelectModel={selectModel}
+          onSelectMode={selectMode}
+          onSelectThinking={selectThinking}
+          onSelectLaunchTarget={(target) => {
+            setLaunchTarget(target);
+            setOpenMenu(null);
+          }}
+          theme={theme}
+          prompt={prompt}
+          onPromptChange={setPrompt}
+          onSubmit={submit}
+          compact={layout.compact}
+        />
+      </View>
+    </>
+  );
+
+  if (layout.compact) {
+    return <View style={[panelStyles.panel, { flex: 1, width: "100%" }]}>{content}</View>;
+  }
+
   return (
-    <WorkspaceCreateComposer
-        project={selectedProject.projectDirectory ? selectedProject : null}
-        hostLabel={hostLabel}
-        projects={projects}
-        isolation={isolation}
-        baseBranch={baseBranch}
-        pending={pending}
-        error={error}
-        providerLoading={providerLoading}
-        snapshot={snapshot}
-        selection={selection}
-        launchTarget={launchTarget}
-        terminalProfiles={terminalProfiles}
-        openMenu={openMenu}
-        onClose={close}
-        onToggleMenu={setOpenMenu}
-        onSelectProject={selectProject}
-        onSelectIsolation={selectIsolation}
-        onSelectBase={selectBase}
-        onSelectModel={selectModel}
-        onSelectMode={selectMode}
-        onSelectThinking={selectThinking}
-        onSelectLaunchTarget={(target) => {
-          setLaunchTarget(target);
-          setOpenMenu(null);
-        }}
-        theme={theme}
-        prompt={prompt}
-        onPromptChange={setPrompt}
-        onSubmit={submit}
-    />
+    <ResizeHandle
+      theme={theme}
+      side="left"
+      variant="grip"
+      initialWidth={420}
+      minWidth={320}
+      maxWidth={720}
+      style={panelStyles.panel}
+    >
+      {content}
+    </ResizeHandle>
   );
 }

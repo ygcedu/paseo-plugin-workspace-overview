@@ -45,7 +45,7 @@ export function PaseoTimelineItem({ entry, theme }: { entry: AgentTimelineEntry;
   const item = entry.item;
   const styles = useMemo(() => ({
     userRoot: { flexDirection: "row", justifyContent: "flex-end", marginVertical: 16 } as ViewStyle,
-    userBubble: { maxWidth: "100%", backgroundColor: theme.colors.foregroundMuted + "18", borderRadius: 16, borderTopRightRadius: 4, padding: 16 } as ViewStyle,
+    userBubble: { maxWidth: "100%", backgroundColor: theme.colors.surface2, borderRadius: 20, borderTopRightRadius: 4, paddingHorizontal: 16, paddingVertical: 16, minWidth: 0, flexShrink: 1 } as ViewStyle,
     userText: { color: theme.colors.foreground, fontSize: 15, lineHeight: 21 } as TextStyle,
     error: { flexDirection: "row", gap: 8, paddingVertical: 10, alignItems: "flex-start" } as ViewStyle,
     errorText: { flex: 1, color: theme.colors.statusDanger, fontSize: 14, lineHeight: 20 } as TextStyle,
@@ -68,6 +68,15 @@ export function PaseoTimelineItem({ entry, theme }: { entry: AgentTimelineEntry;
     return <PaseoStreamBadge label="Updated tasks" secondaryLabel={`${done}/${total}`} icon="ListChecks" detail={detail} theme={theme} />;
   }
   if (item.type === "error") return <View style={styles.error}><Icon name="CircleX" color={theme.colors.statusDanger} size={16} /><Text selectable style={styles.errorText}>{item.message}</Text></View>;
+  if (item.type === "notification") {
+    const color = item.level === "error"
+      ? theme.colors.statusDanger
+      : item.level === "warning"
+        ? theme.colors.statusWarning
+        : theme.colors.foregroundMuted;
+    return <View style={styles.error}><Icon name={item.level === "error" ? "CircleX" : item.level === "warning" ? "TriangleAlert" : "Info"} color={color} size={16} /><Text selectable style={[styles.errorText, { color }]}>{item.message}</Text></View>;
+  }
+  if (item.type === "plugin") return <PaseoStreamBadge label={`Plugin · ${item.kind}`} icon="Puzzle" detail={item.data} theme={theme} />;
   if (item.type === "compaction") return <View style={styles.compact}><View style={styles.compactLine} /><Icon name="Scissors" color={theme.colors.foregroundMuted} size={12} /><Text style={styles.compactText}>Context compacted</Text><View style={styles.compactLine} /></View>;
   return null;
 }

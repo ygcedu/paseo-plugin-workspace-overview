@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import { Badge } from "./WorkspaceBadge";
@@ -25,7 +25,6 @@ export function WorkspaceCreateComposer({
   launchTarget,
   terminalProfiles,
   openMenu,
-  onClose,
   onToggleMenu,
   onSelectProject,
   onSelectIsolation,
@@ -38,6 +37,7 @@ export function WorkspaceCreateComposer({
   prompt,
   onPromptChange,
   onSubmit,
+  compact,
 }: {
   project: WorkspaceProjectOption | null;
   hostLabel: string;
@@ -52,7 +52,6 @@ export function WorkspaceCreateComposer({
   launchTarget: LaunchTarget;
   terminalProfiles: TerminalProfile[];
   openMenu: OpenMenu;
-  onClose: () => void;
   onToggleMenu: (menu: OpenMenu) => void;
   onSelectProject: (projectId: string) => void;
   onSelectIsolation: (isolation: Isolation) => void;
@@ -65,6 +64,7 @@ export function WorkspaceCreateComposer({
   prompt: string;
   onPromptChange: (value: string) => void;
   onSubmit: () => void | Promise<void>;
+  compact: boolean;
 }) {
   const styles = useMemo(() => createComposerStyles(theme), [theme]);
 
@@ -99,17 +99,9 @@ export function WorkspaceCreateComposer({
   if (!project) return null;
 
   return (
-    <View style={styles.panel}>
+    <View style={[styles.panel, compact && { paddingHorizontal: 0, paddingVertical: 4, borderTopWidth: 0 }]}>
       <View style={styles.content}>
-        <View style={styles.header}>
-          <View style={styles.headerText}>
-            <Text style={styles.title}>新建 workspace</Text>
-          </View>
-          <Pressable disabled={pending} onPress={onClose} style={styles.closeButton}>
-            <Icon name="X" color={theme.colors.foregroundMuted} size={14} />
-          </Pressable>
-        </View>
-        <View style={[styles.formStackDesktop, topMenuOpen && styles.menuRegionActive]}>
+        <View style={[styles.formStackDesktop, compact && { flexWrap: "wrap", marginBottom: 16 }, topMenuOpen && styles.menuRegionActive]}>
           <View nativeID="workspace-create-dropdown-project" style={[styles.controlAnchor, openMenu === "project" && styles.controlAnchorOpen]}>
             <Badge
               icon={<ProjectIcon dataUri={project.projectIconDataUri} label={project.projectDisplayName} size={16} theme={theme} />}

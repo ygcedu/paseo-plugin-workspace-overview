@@ -1,5 +1,5 @@
 import React from "react";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 
 interface ProviderBrandIconProps {
@@ -29,7 +29,9 @@ export function ProviderBrandIcon({ providerId, size = 16, color }: ProviderBran
     PROVIDER_SVGS[normalized] ??
     (normalized.includes("codex") || normalized.includes("openai") ? PROVIDER_SVGS.codex : null) ??
     (normalized.includes("claude") || normalized.includes("anthropic") ? PROVIDER_SVGS.claude : null);
-  if (!definition) return <Icon name="Bot" color={color} size={size} />;
+  if (!definition || Platform.OS !== "web") {
+    return <Icon name="Bot" color={color} size={size} />;
+  }
   const xml = `<svg viewBox="${definition.viewBox}" fill="black" xmlns="http://www.w3.org/2000/svg">${definition.body}</svg>`;
   return (
     <View

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
-import { Icon } from "@getpaseo/plugin/client/react-native";
+import { Icon, ScrollView, TextInput } from "@getpaseo/plugin/client/react-native";
 import { ProviderBrandIcon } from "./ProviderBrandIcon";
 import { opaqueSurfaceColor, selectableModels, type ComposerSelection, type ProviderEntry } from "./workspace-creator-shared";
 import { createMenuStyles } from "./workspace-creator-styles";

@@ -86,6 +86,7 @@ export interface WorkspaceCreatorPanelProps {
   onClose: () => void;
   onCreate?: () => void;
   theme: PluginSurfaceProps["theme"];
+  layout: PluginSurfaceProps["layout"];
 }
 
 export interface MenuOption {
@@ -236,9 +237,9 @@ export async function submitWorkspacePrompt(input: {
   setPending: (pending: boolean) => void;
   setError: (error: string | null) => void;
   onDone: () => void;
-}, prompt: string): Promise<void> {
+}, prompt: string): Promise<boolean> {
   prompt = prompt.trim();
-  if (!prompt || !input.project) return;
+  if (!prompt || !input.project) return false;
 
   input.setPending(true);
   input.setError(null);
@@ -280,7 +281,7 @@ export async function submitWorkspacePrompt(input: {
               : null,
           });
           input.onDone();
-          return;
+          return true;
         }
 
         const selection = await ensureSelection({
@@ -324,12 +325,14 @@ export async function submitWorkspacePrompt(input: {
         await input.openAgent(agent.id);
 
         input.onDone();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    input.setError(message);
-  } finally {
-    input.setPending(false);
-  }
+        return true;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        input.setError(message);
+        return false;
+      } finally {
+        input.setPending(false);
+      }
 }
 
 export function providerById(snapshot: ProviderSnapshot | null, providerId: string): ProviderEntry | null {

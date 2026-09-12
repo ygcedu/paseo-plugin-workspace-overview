@@ -144,6 +144,7 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
 
   const handleCreateWorktree = useCallback(
     (projectId: string, projectDisplayName: string, projectDirectory: string) => {
+      setSelectedAgentId(null);
       setCreateDialog({ projectId, projectDisplayName, projectDirectory });
     },
     [],
@@ -312,7 +313,7 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
         </View>
 
         <View style={{ flex: 1, minHeight: 0, flexDirection: "row" }}>
-        <View style={{ flex: 1, minWidth: 0 }}>
+        <View style={{ flex: 1, minWidth: 0, display: createDialog && layout.compact ? "none" : "flex" }}>
         {filteredProjects.length === 0 ? (
           <View style={{ flex: 1, alignItems: "center" as const, justifyContent: "center" as const, padding: 24 }}>
             <Text style={{ color: theme.colors.foregroundMuted, textAlign: "center" as const }}>
@@ -353,7 +354,14 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
                       width={cardWidth}
                       hostLabel={host.label}
                       hostId={host.id}
-                      onSelectAgent={(agent) => setSelectedAgentId(agent.id)}
+                      onSelectAgent={(agent) => {
+                        if (layout.compact && navigation) {
+                          navigation.openAgent({ agentId: agent.id });
+                          return;
+                        }
+                        setCreateDialog(null);
+                        setSelectedAgentId(agent.id);
+                      }}
                       onCreateWorktree={
                         projectDirectory
                           ? () =>
@@ -375,7 +383,7 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
           </ScrollView>
         )}
         </View>
-        {selectedAgent ? (
+        {selectedAgent && (!layout.compact || !navigation) ? (
           <AgentConversationPreview
             key={selectedAgent.id}
             agent={selectedAgent}
@@ -383,7 +391,24 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
             paseo={paseo}
             theme={theme}
             onClose={() => setSelectedAgentId(null)}
-            onOpenFull={() => navigation!.openAgent({ agentId: selectedAgent.id })}
+            onOpenFull={() => navigation?.openAgent({ agentId: selectedAgent.id })}
+          />
+        ) : null}
+        {createDialog ? (
+          <WorkspaceCreatorPanel
+            key={createDialog.projectId}
+            projectId={createDialog.projectId}
+            projectDisplayName={createDialog.projectDisplayName}
+            projectDirectory={createDialog.projectDirectory}
+            hostLabel={host.label}
+            hostId={host.id}
+            navigation={navigation!}
+            projects={createProjectOptions}
+            paseo={paseo}
+            onClose={() => setCreateDialog(null)}
+            onCreate={() => void refetch()}
+            theme={theme}
+            layout={layout}
           />
         ) : null}
         </View>
@@ -399,23 +424,6 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
           </View>
         )}
         </View>
-
-        {createDialog && (
-          <WorkspaceCreatorPanel
-            key={createDialog.projectId}
-            projectId={createDialog.projectId}
-            projectDisplayName={createDialog.projectDisplayName}
-            projectDirectory={createDialog.projectDirectory}
-            hostLabel={host.label}
-            hostId={host.id}
-            navigation={navigation!}
-            projects={createProjectOptions}
-            paseo={paseo}
-            onClose={() => setCreateDialog(null)}
-            onCreate={() => void refetch()}
-            theme={theme}
-          />
-        )}
       </View>
     </TooltipProvider>
   );

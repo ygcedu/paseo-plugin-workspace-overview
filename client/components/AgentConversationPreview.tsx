@@ -11,17 +11,6 @@ import { AgentConversationTimeline } from "./AgentConversationTimeline";
 import { ResizeHandle } from "./ResizeHandle";
 import { createComposerStyles } from "./workspace-creator-styles";
 import { SharedComposerInput } from "./SharedComposerInput";
-import {
-  providerById,
-  selectableModels,
-  defaultSelection,
-  readPaseoProviderModelPreference,
-  PROVIDER_READY_TIMEOUT_MS,
-  buildSelection,
-  type ComposerSelection,
-  type OpenMenu,
-  type ProviderSnapshot,
-} from "./workspace-creator-shared";
 
 function getColors(theme: PluginSurfaceProps["theme"]) {
   const fallback = {
@@ -31,52 +20,12 @@ function getColors(theme: PluginSurfaceProps["theme"]) {
     accent: "#007acc",
     accentForeground: "#ffffff",
     statusDanger: "#ef4444",
+    statusSuccess: "#22c55e",
   };
   if (!theme || !theme.colors) {
     return fallback;
   }
   return { ...fallback, ...theme.colors };
-}
-
-function selectionFromAgent(snapshot: ProviderSnapshot, agent: AgentEntry | Record<string, unknown>): ComposerSelection | null {
-  const agentRecord = agent as Record<string, unknown>;
-  const rawProvider = typeof agentRecord.provider === "string" ? agentRecord.provider : "";
-  const separator = rawProvider.indexOf("/");
-  const providerId = separator >= 0 ? rawProvider.slice(0, separator) : rawProvider;
-  const modelIdFromProvider = separator >= 0 ? rawProvider.slice(separator + 1) : null;
-  const rawModel = typeof agentRecord.model === "string" ? agentRecord.model : null;
-  const modelId = rawModel ?? modelIdFromProvider;
-  const entry = providerById(snapshot, providerId);
-  if (!entry) return defaultSelection(snapshot, readPaseoProviderModelPreference());
-
-  const model =
-    modelId
-      ? selectableModels(entry).find((item) => item.id === modelId || item.label === modelId) ?? undefined
-      : undefined;
-  const selection = buildSelection(entry, model);
-  const modeId =
-    typeof agentRecord.currentModeId === "string"
-      ? agentRecord.currentModeId
-      : typeof agentRecord.modeId === "string"
-        ? agentRecord.modeId
-        : selection.modeId;
-  const mode = entry.modes?.find((item) => item.id === modeId);
-  const thinkingOptionId =
-    typeof agentRecord.thinkingOptionId === "string"
-      ? agentRecord.thinkingOptionId
-      : typeof agentRecord.effectiveThinkingOptionId === "string"
-        ? agentRecord.effectiveThinkingOptionId
-        : selection.thinkingOptionId;
-  const thinking = (model ?? selectableModels(entry).find((item) => item.id === selection.modelId))
-    ?.thinkingOptions?.find((item) => item.id === thinkingOptionId);
-
-  return {
-    ...selection,
-    modeId,
-    modeLabel: mode?.label ?? mode?.id ?? modeId,
-    thinkingOptionId,
-    thinkingLabel: thinking?.label ?? thinking?.id ?? thinkingOptionId,
-  };
 }
 
 type AutoCommitState =
@@ -158,74 +107,15 @@ export function AgentConversationPreview({
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isCancelling, setIsCancelling] = useState(false);
+  const [sending, setSending] = useState(false);
   const [liveStatus, setLiveStatus] = useState(agent.status);
   const loadingRef = useRef(false);
-
-  // Provider/model/mode/thinking selection state (mirrors WorkspaceCreateComposer)
-  const [providerLoading, setProviderLoading] = useState(false);
-  const [snapshot, setSnapshot] = useState<ProviderSnapshot | null>(null);
-  const [selection, setSelection] = useState<ComposerSelection | null>(null);
-  const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
   const startAutoCommit = useRpc(autoCommitStartRpc);
   const getAutoCommitStatus = useRpc(autoCommitStatusRpc);
   const [autoCommitPending, setAutoCommitPending] = useState(false);
   const [autoCommitState, setAutoCommitState] = useState<AutoCommitState>({ kind: "idle" });
   const [autoCommitCopied, setAutoCommitCopied] = useState(false);
   const commitCwd = workspaceDirectory ?? agent.cwd;
-
-  // Load providers from agent's workspace
-  useEffect(() => {
-    let cancelled = false;
-    const loadProviders = async () => {
-      setProviderLoading(true);
-      try {
-        const refetchResult = await handle.refresh();
-        const agentData = refetchResult?.agent ?? handle.current() ?? agent;
-        const workspaceId = agentData?.workspaceId ?? agent.workspaceId;
-        let projectDirectory: string | undefined;
-        if (workspaceDirectory) {
-          projectDirectory = workspaceDirectory;
-        } else if (workspaceId) {
-          const workspace = paseo.workspaces.ref(workspaceId);
-          const wsData = await workspace.current();
-          if (!wsData) {
-            const refreshed = await workspace.refresh();
-            projectDirectory = refreshed?.workspaceDirectory;
-          } else {
-            projectDirectory = wsData.workspaceDirectory;
-          }
-        }
-        if (!projectDirectory) {
-          projectDirectory = agentData?.cwd;
-        }
-        if (!projectDirectory) return;
-        const nextSnapshot = await paseo.providers.waitForReady({
-          cwd: projectDirectory,
-          timeoutMs: PROVIDER_READY_TIMEOUT_MS,
-        });
-        if (cancelled) return;
-        setSnapshot(nextSnapshot);
-        setSelection((current) => {
-          if (current) return current;
-          return selectionFromAgent(nextSnapshot, agentData);
-        });
-      } catch (loadError) {
-        if (cancelled) return;
-        const message = loadError instanceof Error ? loadError.message : String(loadError);
-        setError(message);
-      } finally {
-        if (!cancelled) setProviderLoading(false);
-      }
-    };
-    loadProviders();
-    return () => {
-      cancelled = true;
-    };
-  }, [agent, handle, paseo, workspaceDirectory]);
-
-  const currentProvider = providerById(snapshot, selection?.providerId ?? "");
-  const modes = currentProvider?.modes ?? [];
 
   const refresh = useCallback(async () => {
     if (loadingRef.current) return;
@@ -237,17 +127,6 @@ export function AgentConversationPreview({
       const agentSnapshot = (page as { agent?: { status?: string; currentModeId?: string | null } | null }).agent;
       if (agentSnapshot?.status) {
         setLiveStatus(agentSnapshot.status as typeof liveStatus);
-        setSelection((current) => {
-          if (!current || !("currentModeId" in agentSnapshot)) return current;
-          const nextModeId = typeof agentSnapshot.currentModeId === "string" ? agentSnapshot.currentModeId : current.modeId;
-          if (nextModeId === current.modeId) return current;
-          const mode = currentProvider?.modes?.find((item) => item.id === nextModeId);
-          return {
-            ...current,
-            modeId: nextModeId,
-            modeLabel: mode?.label ?? mode?.id ?? nextModeId,
-          };
-        });
       } else if (handle.status) {
         setLiveStatus(handle.status);
       }
@@ -257,9 +136,7 @@ export function AgentConversationPreview({
       loadingRef.current = false;
       setLoading(false);
     }
-  }, [currentProvider, handle]);
-
-  const isAgentRunning = liveStatus === "running";
+  }, [handle]);
 
   useEffect(() => {
     if (autoCommitState.kind !== "error") return;
@@ -315,22 +192,6 @@ export function AgentConversationPreview({
     void copyText(autoCommitState.message).then(() => setAutoCommitCopied(true)).catch(() => {});
   }, [autoCommitState]);
 
-  const handleCancel = useCallback(async () => {
-    if (isCancelling) return;
-    setIsCancelling(true);
-    try {
-      const client = paseo as unknown as { cancelAgent: (agentId: string) => Promise<void> };
-      if (typeof client.cancelAgent === "function") {
-        await client.cancelAgent(agent.id);
-      }
-      setTimeout(() => void refresh(), 250);
-    } catch (cancelError) {
-      setError(cancelError instanceof Error ? cancelError.message : String(cancelError));
-    } finally {
-      setIsCancelling(false);
-    }
-  }, [paseo, agent.id, isCancelling, refresh]);
-
   // Track live agent status via handle subscription + polling
   useEffect(() => {
     setLiveStatus(agent.status);
@@ -358,12 +219,20 @@ export function AgentConversationPreview({
 
   const submit = useCallback(async () => {
     const text = prompt.trim();
-    if (!text) return;
-    await handle.send(text);
-    setPrompt("");
-    setLiveStatus("running");
-    setTimeout(() => void refresh(), 250);
-  }, [handle, prompt, refresh]);
+    if (!text || sending) return;
+    setSending(true);
+    setError(null);
+    try {
+      await handle.send(text);
+      setPrompt("");
+      setLiveStatus("running");
+      setTimeout(() => void refresh(), 250);
+    } catch (sendError) {
+      setError(sendError instanceof Error ? sendError.message : String(sendError));
+    } finally {
+      setSending(false);
+    }
+  }, [handle, prompt, refresh, sending]);
 
   const colors = getColors(theme);
   const composerStyles = useMemo(() => createComposerStyles(theme), [theme]);
@@ -414,6 +283,22 @@ export function AgentConversationPreview({
       alignItems: "center",
       gap: 6,
     } as ViewStyle,
+    nativeComposerLink: {
+      marginHorizontal: 10,
+      marginBottom: 8,
+      minHeight: 32,
+      paddingHorizontal: 10,
+      borderRadius: 8,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 7,
+      backgroundColor: colors.foregroundMuted + "0d",
+    } as ViewStyle,
+    nativeComposerText: {
+      flex: 1,
+      color: colors.foregroundMuted,
+      fontSize: 11,
+    } as TextStyle,
     quickActionButton: {
       width: 24,
       height: 24,
@@ -454,7 +339,7 @@ export function AgentConversationPreview({
     autoCommitState.kind === "error"
       ? colors.statusDanger
       : autoCommitState.kind === "done"
-        ? "#22c55e"
+        ? colors.statusSuccess
         : autoCommitState.kind === "running" || autoCommitState.kind === "preparing"
           ? colors.accent
           : colors.foregroundMuted;
@@ -520,57 +405,38 @@ export function AgentConversationPreview({
               style={styles.quickActionButton}
             />
           </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="在 Paseo 原生会话中调整模型和模式"
+            onPress={onOpenFull}
+            style={styles.nativeComposerLink}
+          >
+            <Icon name="SlidersHorizontal" size={13} color={colors.foregroundMuted} />
+            <Text numberOfLines={1} style={styles.nativeComposerText}>
+              {[agent.provider, agent.model, agent.currentModeId, agent.thinkingOptionId]
+                .filter(Boolean)
+                .join(" · ")}
+            </Text>
+            <Text style={{ color: colors.accent, fontSize: 11 }}>完整 Composer</Text>
+          </Pressable>
           <SharedComposerInput
-            selection={selection}
-            snapshot={snapshot}
-            providerLoading={providerLoading}
-            openMenu={openMenu}
-            onToggleMenu={setOpenMenu}
-            onSelectModel={(id) => {
-              const separator = id.indexOf("::");
-              const providerId = separator >= 0 ? id.slice(0, separator) : selection?.providerId ?? "";
-              const modelId = separator >= 0 ? id.slice(separator + 2) : id;
-              const entry = providerById(snapshot, providerId);
-              const modelItem = selectableModels(entry).find((item) => item.id === modelId) ?? null;
-              if (entry && modelItem) {
-                setSelection(buildSelection(entry, modelItem));
-              }
-              setOpenMenu(null);
-            }}
-            onSelectMode={(id) => {
-              const mode = modes.find((item) => item.id === id);
-              setSelection((current) =>
-                current
-                  ? {
-                      ...current,
-                      modeId: id,
-                      modeLabel: mode?.label ?? mode?.id ?? id,
-                    }
-                  : current,
-              );
-              setOpenMenu(null);
-            }}
-            onSelectThinking={(id) => {
-              setSelection((current) =>
-                current
-                  ? {
-                      ...current,
-                      thinkingOptionId: id,
-                      thinkingLabel:
-                        selectableModels(currentProvider)
-                          .find((item) => item.id === current.modelId)
-                          ?.thinkingOptions?.find((option) => option.id === id)?.label ?? id,
-                    }
-                  : current,
-              );
-              setOpenMenu(null);
-            }}
-            isAgentRunning={isAgentRunning}
-            isCancelling={isCancelling}
-            onCancel={handleCancel}
+            selection={null}
+            snapshot={null}
+            providerLoading={false}
+            openMenu={null}
+            onToggleMenu={() => {}}
+            onSelectModel={() => {}}
+            onSelectMode={() => {}}
+            onSelectThinking={() => {}}
+            isAgentRunning={false}
+            isCancelling={false}
+            onCancel={onOpenFull}
             placeholder="继续跟进这个 Agent…"
             theme={theme}
             autoFocus
+            disabled={sending}
+            showAgentControls={false}
+            pendingLabel={sending ? "Sending" : null}
             value={prompt}
             onChangeText={setPrompt}
             onSubmit={submit}
