@@ -45,9 +45,8 @@ export function PaseoToolCallGroup({ entries, theme }: { entries: AgentTimelineE
   const loading = entries.some((entry) => entry.item.status === "running" || entry.item.status === "executing");
   const error = entries.some((entry) => entry.item.status === "failed");
   return (
-    <PaseoStreamBadge label={summary} icon="Wrench" loading={loading} error={error} theme={theme}>
+    <PaseoStreamBadge label={summary} icon="Wrench" loading={loading} error={error} sequenceEnd borderlessWhenExpanded theme={theme}>
       {entries.map((entry) => <PaseoTimelineItem key={`${entry.seqStart}:${entry.item.type}`} entry={entry} theme={theme} />)}
     </PaseoStreamBadge>
   );
 }
-

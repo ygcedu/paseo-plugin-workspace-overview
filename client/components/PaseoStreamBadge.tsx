@@ -17,6 +17,8 @@ export function PaseoStreamBadge({
   children,
   loading = false,
   error = false,
+  sequenceEnd = false,
+  borderlessWhenExpanded = false,
   theme,
 }: {
   label: string;
@@ -26,13 +28,15 @@ export function PaseoStreamBadge({
   children?: ReactNode;
   loading?: boolean;
   error?: boolean;
+  sequenceEnd?: boolean;
+  borderlessWhenExpanded?: boolean;
   theme: PluginSurfaceProps["theme"];
 }) {
   const [expanded, setExpanded] = useState(false);
   const content = detailText(detail);
   const interactive = content.length > 0 || Boolean(children);
   const styles = useMemo(() => ({
-    root: { marginBottom: 4 } as ViewStyle,
+    root: { marginHorizontal: -13, marginBottom: sequenceEnd ? 16 : 4 } as ViewStyle,
     header: {
       minHeight: 32,
       paddingHorizontal: 8,
@@ -41,7 +45,7 @@ export function PaseoStreamBadge({
       alignItems: "center",
       borderRadius: 8,
       borderWidth: expanded ? 1 : 0,
-      borderColor: theme.colors.foregroundMuted + "2a",
+      borderColor: borderlessWhenExpanded ? "transparent" : theme.colors.foregroundMuted + "2a",
       borderBottomLeftRadius: expanded ? 0 : 8,
       borderBottomRightRadius: expanded ? 0 : 8,
       backgroundColor: expanded ? theme.colors.foregroundMuted + "0d" : "transparent",
@@ -50,17 +54,19 @@ export function PaseoStreamBadge({
     label: { color: expanded || loading ? theme.colors.foreground : theme.colors.foregroundMuted, fontSize: 14 } as TextStyle,
     secondary: { color: theme.colors.foregroundMuted, fontSize: 14, marginLeft: 8, flex: 1 } as TextStyle,
     detail: {
-      borderWidth: 1,
+      borderWidth: borderlessWhenExpanded ? 0 : 1,
       borderTopWidth: 0,
       borderColor: theme.colors.foregroundMuted + "2a",
       borderBottomLeftRadius: 8,
       borderBottomRightRadius: 8,
-      padding: 10,
-      maxHeight: 260,
-      backgroundColor: theme.colors.surface0,
+      paddingTop: 4,
+      paddingHorizontal: 13,
+      paddingBottom: borderlessWhenExpanded ? 0 : 10,
+      maxHeight: borderlessWhenExpanded ? 400 : 260,
+      backgroundColor: borderlessWhenExpanded ? "transparent" : theme.colors.surface0,
     } as ViewStyle,
     detailText: { color: theme.colors.foreground, fontSize: 12, lineHeight: 18, fontFamily: "monospace" } as TextStyle,
-  }), [expanded, loading, theme]);
+  }), [borderlessWhenExpanded, expanded, loading, sequenceEnd, theme]);
 
   return (
     <View style={styles.root}>

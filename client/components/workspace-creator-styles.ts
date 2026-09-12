@@ -148,21 +148,6 @@ export function createComposerStyles(theme: PluginSurfaceProps["theme"]) {
       alignItems: "center",
       justifyContent: "center",
     } as ViewStyle,
-    attachButton: {
-      width: 28,
-      height: 28,
-      borderRadius: 14,
-      alignItems: "center",
-      justifyContent: "center",
-      flexShrink: 0,
-    } as ViewStyle,
-    idleVoiceButton: {
-      width: 28,
-      height: 28,
-      alignItems: "center",
-      justifyContent: "center",
-      opacity: 0.5,
-    } as ViewStyle,
     disabled: {
       opacity: 0.5,
     } as ViewStyle,
@@ -249,8 +234,8 @@ export function createMenuStyles(theme: PluginSurfaceProps["theme"]) {
       backgroundColor: menuBackground,
       borderWidth: 1,
       borderColor: colors.foregroundMuted + "22",
-      borderRadius: 8,
-      paddingVertical: 4,
+      borderRadius: 12,
+      paddingVertical: 6,
       shadowColor: "#000",
       shadowOpacity: 0.18,
       shadowRadius: 16,
@@ -268,11 +253,11 @@ export function createMenuStyles(theme: PluginSurfaceProps["theme"]) {
       backgroundColor: menuBackground,
     } as ViewStyle,
     menuSearchRow: {
-      minHeight: 38,
+      minHeight: 42,
       flexDirection: "row",
       alignItems: "center",
       gap: 8,
-      paddingHorizontal: 10,
+      paddingHorizontal: 12,
       backgroundColor: menuBackground,
     } as ViewStyle,
     menuSearchInput: {
@@ -285,6 +270,9 @@ export function createMenuStyles(theme: PluginSurfaceProps["theme"]) {
       lineHeight: 18,
       borderWidth: 0,
       backgroundColor: "transparent",
+      ...(Platform.OS === "web"
+        ? ({ outlineStyle: "none", outlineWidth: 0, outlineColor: "transparent" } as object)
+        : {}),
     } as TextStyle,
     menuEmptyText: {
       color: colors.foregroundMuted,
@@ -299,14 +287,13 @@ export function createMenuStyles(theme: PluginSurfaceProps["theme"]) {
       alignItems: "center",
       justifyContent: "space-between",
       gap: 12,
+      minHeight: 40,
       paddingHorizontal: 12,
-      paddingVertical: 8,
+      paddingVertical: 7,
       backgroundColor: menuBackground,
     } as ViewStyle,
     menuItemSelected: {
-      borderLeftWidth: 3,
-      borderLeftColor: colors.accent,
-      paddingLeft: 9,
+      backgroundColor: colors.foregroundMuted + "0d",
     } as ViewStyle,
     menuIconBox: {
       width: 18,

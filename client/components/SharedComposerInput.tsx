@@ -148,9 +148,6 @@ export function SharedComposerInput({
       <View style={styles.buttonRow}>
         {showAgentControls ? (
           <View style={styles.leftControls}>
-            <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.attachButton}>
-              <Icon name="Plus" color={colors.foregroundMuted} size={17} />
-            </View>
             <View nativeID="workspace-create-dropdown-model" style={[styles.controlAnchor, openMenu === "model" && styles.controlAnchorOpen]}>
               <SelectControl
                 kind="model"
@@ -231,11 +228,7 @@ export function SharedComposerInput({
             >
               <Icon name={isCancelling ? "Loader" : "Square"} color="#fff" size={14} />
             </Pressable>
-          ) : !hasInput ? (
-            <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.idleVoiceButton}>
-              <Icon name="Mic" color={colors.foregroundMuted} size={15} />
-            </View>
-          ) : (
+          ) : hasInput ? (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="发送"
@@ -245,7 +238,7 @@ export function SharedComposerInput({
             >
               <Icon name="CornerDownLeft" color={colors.accentForeground} size={16} />
             </Pressable>
-          )}
+          ) : null}
         </View>
       </View>
     </View>
