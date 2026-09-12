@@ -64,15 +64,29 @@ function toolSummary(item: AgentTimelineEntry["item"]): string {
 
 function timelineMessages(entries: AgentTimelineEntry[]): ThreadMessageLike[] {
   const messages: ThreadMessageLike[] = [];
+  const messageIds = new Map<string, number>();
+
+  const nextMessageId = (entry: AgentTimelineEntry): string => {
+    // Provider message IDs identify a logical message and may legitimately be
+    // repeated across projected timeline entries while that message streams.
+    // assistant-ui requires every repository node ID to be unique, so key its
+    // local nodes by the timeline entry instead and guard the unlikely case
+    // where one projection emits the same type and sequence more than once.
+    const base = `timeline-${entry.seqStart}-${entry.item.type}`;
+    const occurrence = messageIds.get(base) ?? 0;
+    messageIds.set(base, occurrence + 1);
+    return occurrence === 0 ? base : `${base}-${occurrence}`;
+  };
+
   for (const entry of entries) {
     const item = entry.item;
-    const base = { id: item.type === "user_message" || item.type === "assistant_message" ? item.messageId : undefined, createdAt: new Date(entry.timestamp) };
-    if (item.type === "user_message") messages.push({ ...base, id: base.id ?? `user-${entry.seqStart}`, role: "user", content: item.text });
-    else if (item.type === "assistant_message") messages.push({ ...base, id: base.id ?? `assistant-${entry.seqStart}`, role: "assistant", content: item.text });
-    else if (item.type === "reasoning") messages.push({ id: `reasoning-${entry.seqStart}`, role: "assistant", content: [{ type: "reasoning", text: item.text }] });
-    else if (item.type === "tool_call") messages.push({ id: `tool-${entry.seqStart}`, role: "assistant", content: toolSummary(item) });
-    else if (item.type === "todo") messages.push({ id: `todo-${entry.seqStart}`, role: "assistant", content: item.items.map((todo: { completed: boolean; text: string }) => `${todo.completed ? "[x]" : "[ ]"} ${todo.text}`).join("\n") });
-    else if (item.type === "error") messages.push({ id: `error-${entry.seqStart}`, role: "assistant", content: `Error: ${item.message}` });
+    const base = { id: nextMessageId(entry), createdAt: new Date(entry.timestamp) };
+    if (item.type === "user_message") messages.push({ ...base, role: "user", content: item.text });
+    else if (item.type === "assistant_message") messages.push({ ...base, role: "assistant", content: item.text });
+    else if (item.type === "reasoning") messages.push({ ...base, role: "assistant", content: [{ type: "reasoning", text: item.text }] });
+    else if (item.type === "tool_call") messages.push({ ...base, role: "assistant", content: toolSummary(item) });
+    else if (item.type === "todo") messages.push({ ...base, role: "assistant", content: item.items.map((todo: { completed: boolean; text: string }) => `${todo.completed ? "[x]" : "[ ]"} ${todo.text}`).join("\n") });
+    else if (item.type === "error") messages.push({ ...base, role: "assistant", content: `Error: ${item.message}` });
   }
   return messages;
 }
