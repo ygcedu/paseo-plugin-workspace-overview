@@ -9,6 +9,8 @@ import type { OpenMenu, PaseoClient } from "../workspace-creator/types";
 import { useProviderCatalog } from "../workspace-creator/useProviderCatalog";
 import { SharedComposerInput } from "./SharedComposerInput";
 import { ResizeHandle } from "./ResizeHandle";
+import { useKeyboardInset } from "../hooks/useKeyboardInset";
+import { ensureSelection } from "../workspace-creator/submit-workspace";
 
 interface AgentCreatorPanelProps {
   workspace: WorkspaceEntry;
@@ -26,6 +28,7 @@ export function AgentCreatorPanel({ workspace, paseo, theme, compact, initialPan
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
+  const keyboardInset = useKeyboardInset(compact);
   const { snapshot, selection, setSelection, loading, error: providerError } = useProviderCatalog(
     paseo,
     workspace.workspaceDirectory,
@@ -59,15 +62,22 @@ export function AgentCreatorPanel({ workspace, paseo, theme, compact, initialPan
 
   const submit = useCallback(async () => {
     const nextPrompt = prompt.trim();
-    if (!nextPrompt || !selection) return;
+    if (!nextPrompt) return;
     setPending(true);
     setError(null);
     try {
+      const resolvedSelection = await ensureSelection({
+        paseo,
+        projectDirectory: workspace.workspaceDirectory,
+        snapshot,
+        selection,
+      });
+      setSelection(resolvedSelection);
       const agent = await paseo.workspaces.ref(workspace.id).agents.create({
         config: {
-          provider: providerModelId(selection),
-          ...(selection.modeId ? { modeId: selection.modeId } : {}),
-          ...(selection.thinkingOptionId ? { thinkingOptionId: selection.thinkingOptionId } : {}),
+          provider: providerModelId(resolvedSelection),
+          ...(resolvedSelection.modeId ? { modeId: resolvedSelection.modeId } : {}),
+          ...(resolvedSelection.thinkingOptionId ? { thinkingOptionId: resolvedSelection.thinkingOptionId } : {}),
         },
         prompt: nextPrompt,
       });
@@ -78,7 +88,7 @@ export function AgentCreatorPanel({ workspace, paseo, theme, compact, initialPan
     } finally {
       setPending(false);
     }
-  }, [onCreated, paseo, prompt, selection, workspace.id]);
+  }, [onCreated, paseo, prompt, selection, setSelection, snapshot, workspace.id, workspace.workspaceDirectory]);
 
   const styles = useMemo(() => ({
     panel: { height: "100%", borderLeftWidth: 1, borderLeftColor: theme.colors.foregroundMuted + "22", backgroundColor: theme.colors.surface0 } as ViewStyle,
@@ -86,9 +96,9 @@ export function AgentCreatorPanel({ workspace, paseo, theme, compact, initialPan
     title: { flex: 1, color: theme.colors.foreground, fontSize: 14, fontWeight: "600" } as TextStyle,
     subtitle: { color: theme.colors.foregroundMuted, fontSize: 11 } as TextStyle,
     close: { width: 30, height: 30, alignItems: "center", justifyContent: "center" } as ViewStyle,
-    body: { flex: 1, justifyContent: "flex-end", paddingHorizontal: compact ? 12 : 20, paddingBottom: compact ? 12 : 20 } as ViewStyle,
+    body: { flex: 1, justifyContent: "flex-end", paddingHorizontal: compact ? 12 : 20, paddingBottom: compact ? 12 + keyboardInset : 20 } as ViewStyle,
     error: { color: (theme.colors as { statusDanger?: string }).statusDanger ?? "#ef4444", fontSize: 12, marginTop: 8 } as TextStyle,
-  }), [compact, theme]);
+  }), [compact, keyboardInset, theme]);
 
   const content = <>
     <View style={styles.header}>
@@ -116,7 +126,7 @@ export function AgentCreatorPanel({ workspace, paseo, theme, compact, initialPan
         onCancel={() => {}}
         placeholder="给新 Agent 发第一条消息"
         theme={theme}
-        disabled={pending || !selection}
+        disabled={pending}
         autoFocus
         inputNativeID="agent-create-prompt"
         pendingLabel={pending ? "Creating" : null}
@@ -128,6 +138,8 @@ export function AgentCreatorPanel({ workspace, paseo, theme, compact, initialPan
     </View>
   </>;
 
-  if (compact) return <View style={[styles.panel, { flex: 1, width: "100%" }]}>{content}</View>;
+  if (compact) {
+    return <View style={[styles.panel, { flex: 1, width: "100%" }]}>{content}</View>;
+  }
   return <ResizeHandle theme={theme} side="left" variant="grip" initialWidth={initialPanelWidth} minWidth={360} maxWidth={maxPanelWidth} style={styles.panel}>{content}</ResizeHandle>;
 }

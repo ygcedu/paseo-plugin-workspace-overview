@@ -30,7 +30,7 @@ export interface ComposerSelection {
 export interface PaseoProviderModelPreference { providerId: string; modelId: string | null }
 export interface WorkspaceCreatorPanelProps {
   projectId: string; projectDisplayName: string; projectDirectory: string | undefined;
-  hostLabel: string; hostId: string; navigation: NonNullable<PluginSurfaceProps["navigation"]>;
+  hostId: string; navigation: NonNullable<PluginSurfaceProps["navigation"]>;
   projects: WorkspaceProjectOption[]; paseo: PaseoClient; onClose: () => void; onCreate?: () => void;
   initialPanelWidth?: number; maxPanelWidth?: number;
   theme: PluginSurfaceProps["theme"]; layout: PluginSurfaceProps["layout"];

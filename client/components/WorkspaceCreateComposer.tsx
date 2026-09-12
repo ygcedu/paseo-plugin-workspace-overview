@@ -6,15 +6,12 @@ import { Badge } from "./WorkspaceBadge";
 import { Menu } from "./WorkspaceMenu";
 import type { ComposerSelection, Isolation, LaunchTarget, MenuOption, OpenMenu, ProviderSnapshot, TerminalProfile, WorkspaceProjectOption } from "../workspace-creator/types";
 import { createComposerStyles } from "./workspace-creator-styles";
-import { ProjectIcon } from "./ProjectIcon";
 import { ProviderBrandIcon } from "./ProviderBrandIcon";
 import { WorkspaceLaunchMenu } from "./WorkspaceLaunchMenu";
 import { SharedComposerInput } from "./SharedComposerInput";
 
 export function WorkspaceCreateComposer({
   project,
-  hostLabel,
-  projects,
   isolation,
   baseBranch,
   pending,
@@ -26,7 +23,6 @@ export function WorkspaceCreateComposer({
   terminalProfiles,
   openMenu,
   onToggleMenu,
-  onSelectProject,
   onSelectIsolation,
   onSelectBase,
   onSelectModel,
@@ -40,8 +36,6 @@ export function WorkspaceCreateComposer({
   compact,
 }: {
   project: WorkspaceProjectOption | null;
-  hostLabel: string;
-  projects: WorkspaceProjectOption[];
   isolation: Isolation;
   baseBranch: string;
   pending: boolean;
@@ -53,7 +47,6 @@ export function WorkspaceCreateComposer({
   terminalProfiles: TerminalProfile[];
   openMenu: OpenMenu;
   onToggleMenu: (menu: OpenMenu) => void;
-  onSelectProject: (projectId: string) => void;
   onSelectIsolation: (isolation: Isolation) => void;
   onSelectBase: (branch: string) => void;
   onSelectModel: (modelId: string) => void;
@@ -75,12 +68,6 @@ export function WorkspaceCreateComposer({
     ? "Chat"
     : selectedTerminalProfile ? `Terminal ${selectedTerminalProfile.name}` : "Terminal";
 
-  const projectOptions = projects.map((item) => ({
-    id: item.projectId,
-    label: item.projectDisplayName,
-    detail: item.projectDirectory,
-    projectIconDataUri: item.projectIconDataUri ?? null,
-  }));
   const isolationOptions: MenuOption[] = [
     { id: "worktree", label: "新建 worktree", detail: "创建隔离分支 workspace", iconName: "GitBranch" },
     { id: "local", label: "Local", detail: "在项目目录中创建 workspace", iconName: "Folder" },
@@ -94,40 +81,13 @@ export function WorkspaceCreateComposer({
     detail: branch.detail,
     iconName: "GitBranch",
   }));
-  const hostOptions: MenuOption[] = [{ id: "current", label: hostLabel, iconName: "Server" }];
-  const topMenuOpen = openMenu === "project" || openMenu === "host" || openMenu === "isolation" || openMenu === "base" || openMenu === "launch";
+  const topMenuOpen = openMenu === "isolation" || openMenu === "base" || openMenu === "launch";
   if (!project) return null;
 
   return (
     <View style={[styles.panel, compact && { paddingHorizontal: 0, paddingVertical: 4, borderTopWidth: 0 }]}>
       <View style={styles.content}>
         <View style={[styles.formStackDesktop, compact && { flexWrap: "wrap", marginBottom: 16 }, topMenuOpen && styles.menuRegionActive]}>
-          <View nativeID="workspace-create-dropdown-project" style={[styles.controlAnchor, openMenu === "project" && styles.controlAnchorOpen]}>
-            <Badge
-              icon={<ProjectIcon dataUri={project.projectIconDataUri} label={project.projectDisplayName} size={16} theme={theme} />}
-              label={project.projectDisplayName}
-              selectable={projects.length > 1}
-              disabled={pending}
-              onPress={() => onToggleMenu(openMenu === "project" ? null : "project")}
-              theme={theme}
-            />
-            {openMenu === "project" ? (
-              <Menu kind="project" placement="above" options={projectOptions} selectedId={project.projectId} onSelect={onSelectProject} theme={theme} />
-            ) : null}
-          </View>
-          <View nativeID="workspace-create-dropdown-host" style={[styles.controlAnchor, openMenu === "host" && styles.controlAnchorOpen]}>
-            <Badge
-              icon={<View style={styles.hostStatusDot} />}
-              label={hostLabel}
-              selectable
-              disabled={pending}
-              onPress={() => onToggleMenu(openMenu === "host" ? null : "host")}
-              theme={theme}
-            />
-            {openMenu === "host" ? (
-              <Menu kind="host" placement="above" options={hostOptions} selectedId="current" onSelect={() => onToggleMenu(null)} theme={theme} />
-            ) : null}
-          </View>
           <View nativeID="workspace-create-dropdown-isolation" style={[styles.controlAnchor, openMenu === "isolation" && styles.controlAnchorOpen]}>
             <Badge
               icon={<Icon name="GitBranch" color={theme.colors.foregroundMuted} size={16} />}

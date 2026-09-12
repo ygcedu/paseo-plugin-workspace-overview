@@ -9,12 +9,12 @@ import { submitWorkspacePrompt } from "../workspace-creator/submit-workspace";
 import type { Isolation, LaunchTarget, OpenMenu, WorkspaceCreatorPanelProps } from "../workspace-creator/types";
 import { terminalLaunchRpc } from "../../shared/terminal-launch";
 import { useProviderCatalog, useTerminalProfiles } from "../workspace-creator/useProviderCatalog";
+import { useKeyboardInset } from "../hooks/useKeyboardInset";
 
 export function WorkspaceCreatorPanel({
   projectId,
   projectDisplayName,
   projectDirectory,
-  hostLabel,
   hostId,
   navigation,
   projects,
@@ -30,7 +30,6 @@ export function WorkspaceCreatorPanel({
   const [error, setError] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
   const [prompt, setPrompt] = useState("");
-  const [selectedProjectId, setSelectedProjectId] = useState(projectId);
   const [isolation, setIsolation] = useState<Isolation>("worktree");
   const [baseBranch, setBaseBranch] = useState(() => {
     const initialProject = projects.find((project) => project.projectId === projectId);
@@ -38,37 +37,23 @@ export function WorkspaceCreatorPanel({
   });
   const [launchTarget, setLaunchTarget] = useState<LaunchTarget>({ kind: "chat" });
   const launchTerminal = useRpc(terminalLaunchRpc);
+  const keyboardInset = useKeyboardInset(layout.compact);
 
   const selectedProject = useMemo(
     () =>
-      projects.find((project) => project.projectId === selectedProjectId) ?? {
+      projects.find((project) => project.projectId === projectId) ?? {
         projectId,
         projectDisplayName,
         projectDirectory: projectDirectory ?? "",
         branches: [{ id: "main", label: "main", detail: "本地分支" }],
         defaultBranch: "main",
       },
-    [projectDirectory, projectDisplayName, projectId, projects, selectedProjectId],
+    [projectDirectory, projectDisplayName, projectId, projects],
   );
   const terminalProfiles = useTerminalProfiles(paseo);
   const providerCatalog = useProviderCatalog(paseo, selectedProject.projectDirectory);
   const { snapshot, selection, setSelection, loading: providerLoading } = providerCatalog;
   const visibleError = error ?? providerCatalog.error;
-
-  const selectProject = useCallback(
-    (nextProjectId: string) => {
-      const nextProject = projects.find((project) => project.projectId === nextProjectId);
-      if (!nextProject) return;
-      setSelectedProjectId(nextProjectId);
-      setBaseBranch(
-        nextProject.branches.some((branch) => branch.id === baseBranch)
-          ? baseBranch
-          : nextProject.defaultBranch ?? nextProject.branches[0]?.id ?? "main",
-      );
-      setOpenMenu(null);
-    },
-    [baseBranch, projects],
-  );
 
   const selectBase = useCallback((branch: string) => {
     setBaseBranch(branch);
@@ -197,9 +182,9 @@ export function WorkspaceCreatorPanel({
       flex: 1,
       justifyContent: "flex-end",
       paddingHorizontal: layout.compact ? 12 : 20,
-      paddingBottom: layout.compact ? 12 : 20,
+      paddingBottom: layout.compact ? 12 + keyboardInset : 20,
     } as ViewStyle,
-  }), [layout.compact, theme]);
+  }), [keyboardInset, layout.compact, theme]);
 
   const content = (
     <>
@@ -213,8 +198,6 @@ export function WorkspaceCreatorPanel({
       <View style={panelStyles.body}>
         <WorkspaceCreateComposer
           project={selectedProject.projectDirectory ? selectedProject : null}
-          hostLabel={hostLabel}
-          projects={projects}
           isolation={isolation}
           baseBranch={baseBranch}
           pending={pending}
@@ -226,7 +209,6 @@ export function WorkspaceCreatorPanel({
           terminalProfiles={terminalProfiles}
           openMenu={openMenu}
           onToggleMenu={setOpenMenu}
-          onSelectProject={selectProject}
           onSelectIsolation={selectIsolation}
           onSelectBase={selectBase}
           onSelectModel={selectModel}

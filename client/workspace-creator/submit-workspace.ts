@@ -4,7 +4,7 @@ import type { ComposerSelection, Isolation, LaunchTarget, PaseoClient, ProviderS
 
 function createWorktreeSlug(): string { return `workspace-${Date.now().toString(36)}`; }
 
-async function ensureSelection(input: { paseo: PaseoClient; projectDirectory: string; snapshot: ProviderSnapshot | null; selection: ComposerSelection | null }): Promise<ComposerSelection> {
+export async function ensureSelection(input: { paseo: PaseoClient; projectDirectory: string; snapshot: ProviderSnapshot | null; selection: ComposerSelection | null }): Promise<ComposerSelection> {
   if (input.selection) return input.selection;
   const snapshot = input.snapshot ?? await input.paseo.providers.waitForReady({ cwd: input.projectDirectory, timeoutMs: PROVIDER_READY_TIMEOUT_MS });
   const selection = defaultSelection(snapshot);

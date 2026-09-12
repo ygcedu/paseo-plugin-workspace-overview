@@ -191,6 +191,8 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
         onLayout={measureSurface}
       >
         <View style={{ flex: 1, minHeight: 0, position: "relative" }}>
+        <View style={{ flex: 1, minHeight: 0, flexDirection: "row" }}>
+        <View style={{ flex: 1, minWidth: 0, display: (createDialog || agentCreateWorkspace) && layout.compact ? "none" : "flex" }}>
         <View style={{ paddingHorizontal: horizontalPadding, paddingTop: 12, paddingBottom: 8 }}>
           <View style={{ flexDirection: "row" as const, alignItems: "center" as const }}>
             <Text style={{ color: theme.colors.foreground, fontSize: layout.compact ? 18 : 22, fontWeight: "700" as const }}>
@@ -228,8 +230,6 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
           </View>
         </View>
 
-        <View style={{ flex: 1, minHeight: 0, flexDirection: "row" }}>
-        <View style={{ flex: 1, minWidth: 0, display: (createDialog || agentCreateWorkspace) && layout.compact ? "none" : "flex" }}>
         {filteredProjects.length === 0 ? (
           <View style={{ flex: 1, alignItems: "center" as const, justifyContent: "center" as const, padding: 24 }}>
             <Text style={{ color: theme.colors.foregroundMuted, textAlign: "center" as const }}>
@@ -324,7 +324,6 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
             projectId={createDialog.projectId}
             projectDisplayName={createDialog.projectDisplayName}
             projectDirectory={createDialog.projectDirectory}
-            hostLabel={host.label}
             hostId={host.id}
             navigation={navigation!}
             projects={createProjectOptions}
