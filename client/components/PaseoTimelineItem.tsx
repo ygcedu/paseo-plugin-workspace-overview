@@ -5,6 +5,7 @@ import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 import type { AgentTimelineEntry } from "./agent-conversation-types";
 import { PaseoStreamBadge } from "./PaseoStreamBadge";
 import { PaseoAssistantMessage } from "./PaseoAssistantMessage";
+import { PaseoShellDetail } from "./PaseoShellDetail";
 
 function toolPresentation(item: AgentTimelineEntry["item"]): { label: string; secondary?: string; detail?: unknown; icon: string } {
   const detail = item.detail as Record<string, unknown> | undefined;
@@ -59,7 +60,28 @@ export function PaseoTimelineItem({ entry, theme }: { entry: AgentTimelineEntry;
   if (item.type === "reasoning") return <PaseoStreamBadge label="Thinking" icon="Brain" detail={item.text} loading={item.status !== "ready"} theme={theme} />;
   if (item.type === "tool_call") {
     const presentation = toolPresentation(item);
-    return <PaseoStreamBadge label={presentation.label} secondaryLabel={presentation.secondary} icon={presentation.icon} detail={presentation.detail} loading={item.status === "running" || item.status === "executing"} error={item.status === "failed"} theme={theme} />;
+    const shellDetail = item.detail?.type === "shell" ? item.detail : null;
+    return (
+      <PaseoStreamBadge
+        label={presentation.label}
+        secondaryLabel={presentation.secondary}
+        icon={presentation.icon}
+        detail={shellDetail ? undefined : presentation.detail}
+        loading={item.status === "running" || item.status === "executing"}
+        error={item.status === "failed"}
+        fullBleedDetail={Boolean(shellDetail)}
+        theme={theme}
+      >
+        {shellDetail ? (
+          <PaseoShellDetail
+            command={String(shellDetail.command ?? "")}
+            output={shellDetail.output}
+            error={item.status === "failed" ? item.error : null}
+            theme={theme}
+          />
+        ) : null}
+      </PaseoStreamBadge>
+    );
   }
   if (item.type === "todo") {
     const done = item.items?.filter((todo: { completed?: boolean }) => todo.completed).length ?? 0;

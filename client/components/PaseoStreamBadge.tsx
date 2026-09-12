@@ -19,6 +19,7 @@ export function PaseoStreamBadge({
   error = false,
   sequenceEnd = false,
   borderlessWhenExpanded = false,
+  fullBleedDetail = false,
   theme,
 }: {
   label: string;
@@ -30,6 +31,7 @@ export function PaseoStreamBadge({
   error?: boolean;
   sequenceEnd?: boolean;
   borderlessWhenExpanded?: boolean;
+  fullBleedDetail?: boolean;
   theme: PluginSurfaceProps["theme"];
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -59,14 +61,14 @@ export function PaseoStreamBadge({
       borderColor: theme.colors.foregroundMuted + "2a",
       borderBottomLeftRadius: 8,
       borderBottomRightRadius: 8,
-      paddingTop: 4,
-      paddingHorizontal: 13,
-      paddingBottom: borderlessWhenExpanded ? 0 : 10,
+      paddingTop: fullBleedDetail ? 0 : 4,
+      paddingHorizontal: fullBleedDetail ? 0 : 13,
+      paddingBottom: fullBleedDetail || borderlessWhenExpanded ? 0 : 10,
       maxHeight: borderlessWhenExpanded ? 400 : 260,
-      backgroundColor: borderlessWhenExpanded ? "transparent" : theme.colors.surface0,
+      backgroundColor: borderlessWhenExpanded ? "transparent" : fullBleedDetail ? theme.colors.surface1 : theme.colors.surface0,
     } as ViewStyle,
     detailText: { color: theme.colors.foreground, fontSize: 12, lineHeight: 18, fontFamily: "monospace" } as TextStyle,
-  }), [borderlessWhenExpanded, expanded, loading, sequenceEnd, theme]);
+  }), [borderlessWhenExpanded, expanded, fullBleedDetail, loading, sequenceEnd, theme]);
 
   return (
     <View style={styles.root}>
