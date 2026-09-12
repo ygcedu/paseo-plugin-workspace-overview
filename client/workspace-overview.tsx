@@ -1,5 +1,4 @@
-import { type PluginSurfaceProps, usePaseo, useRpc } from "@getpaseo/plugin/client";
-import { useQuery } from "@tanstack/react-query";
+import { type PluginSurfaceProps, usePaseo } from "@getpaseo/plugin/client";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { ScrollView, Text, TouchableOpacity, View, type LayoutChangeEvent, type ViewStyle, type TextStyle } from "react-native";
 
@@ -8,30 +7,9 @@ import { ProjectCard } from "./components/ProjectCard";
 import { WorkspaceCreatorPanel } from "./components/WorkspaceCreatorPanel";
 import { useWorkspaces } from "./hooks/useWorkspaces";
 import { useFilter, TIME_RANGES, type TimeRange } from "./hooks/useFilter";
-import { type AgentEntry, type TooltipState, type WorkspaceEntry } from "../shared/overview-types";
-import { projectIconRpc } from "../shared/project-icon";
-import { gitBranchesRpc } from "../shared/git-branches";
+import { type AgentEntry, type TooltipState } from "../shared/overview-types";
 import { AgentConversationPreview } from "./components/AgentConversationPreview";
-
-function resolveProjectSourceDirectory(workspaces: WorkspaceEntry[]): string | undefined {
-  return (
-    workspaces.find((workspace) => workspace.workspaceKind !== "worktree")?.workspaceDirectory ??
-    workspaces[0]?.workspaceDirectory
-  );
-}
-
-function resolveProjectBranchFallbacks(workspaces: WorkspaceEntry[]) {
-  const branches = new Set<string>();
-  for (const workspace of workspaces) {
-    const branch = workspace.gitRuntime?.currentBranch?.trim();
-    if (branch) branches.add(branch);
-  }
-  return Array.from(branches).map((branch) => ({
-    id: branch,
-    label: branch,
-    detail: "当前 Workspace 分支",
-  }));
-}
+import { projectSourceDirectory, useProjectOptions } from "./overview/useProjectOptions";
 
 export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSurfaceProps) {
   const [containerWidth, setContainerWidth] = useState(0);
@@ -77,66 +55,7 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
     return undefined;
   }, [projects, selectedAgent]);
 
-  const createProjectOptionsWithoutIcons = useMemo(
-    () =>
-      projects
-        .map((project) => {
-          const projectDirectory = resolveProjectSourceDirectory(project.workspaces);
-          if (!projectDirectory) return null;
-          return {
-            projectId: project.projectId,
-            projectDisplayName: project.projectDisplayName,
-            projectDirectory,
-            branches: resolveProjectBranchFallbacks(project.workspaces),
-            defaultBranch: resolveProjectBranchFallbacks(project.workspaces)[0]?.id ?? null,
-          };
-        })
-        .filter((project): project is NonNullable<typeof project> => project !== null),
-    [projects],
-  );
-  const getProjectIcon = useRpc(projectIconRpc);
-  const getGitBranches = useRpc(gitBranchesRpc);
-  const { data: projectIcons = new Map<string, string | null>() } = useQuery({
-    queryKey: ["workspace-overview-project-icons", host.id, createProjectOptionsWithoutIcons.map((item) => item.projectId)],
-    queryFn: async () => {
-      const entries = await Promise.all(
-        createProjectOptionsWithoutIcons.map(async (project) => [
-          project.projectId,
-          (await getProjectIcon({
-            projectId: project.projectId,
-            projectDirectory: project.projectDirectory,
-          })).dataUri,
-        ] as const),
-      );
-      return new Map(entries);
-    },
-    enabled: createProjectOptionsWithoutIcons.length > 0,
-    staleTime: 60_000,
-  });
-  const { data: projectBranches = new Map<string, Awaited<ReturnType<typeof getGitBranches>>>() } = useQuery({
-    queryKey: ["workspace-overview-git-branches", host.id, createProjectOptionsWithoutIcons.map((item) => item.projectDirectory)],
-    queryFn: async () => {
-      const entries = await Promise.all(
-        createProjectOptionsWithoutIcons.map(async (project) => [
-          project.projectId,
-          await getGitBranches({ projectDirectory: project.projectDirectory }),
-        ] as const),
-      );
-      return new Map(entries);
-    },
-    enabled: createProjectOptionsWithoutIcons.length > 0,
-    staleTime: 10_000,
-  });
-  const createProjectOptions = useMemo(
-    () =>
-      createProjectOptionsWithoutIcons.map((project) => ({
-        ...project,
-        branches: projectBranches.get(project.projectId)?.branches ?? project.branches,
-        defaultBranch: projectBranches.get(project.projectId)?.defaultBranch ?? project.defaultBranch,
-        projectIconDataUri: projectIcons.get(project.projectId) ?? null,
-      })),
-    [createProjectOptionsWithoutIcons, projectBranches, projectIcons],
-  );
+  const createProjectOptions = useProjectOptions(host.id, projects);
 
   const handleOpenDirectory = useCallback((directory: string) => {
     void paseo.workspaces.open(directory);
@@ -336,7 +255,7 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
             >
               {columns > 0 && cardWidth > 0 &&
                 filteredProjects.map((project) => {
-                  const projectDirectory = resolveProjectSourceDirectory(project.workspaces);
+                  const projectDirectory = projectSourceDirectory(project.workspaces);
                   return (
                     <ProjectCard
                       key={project.projectId}
