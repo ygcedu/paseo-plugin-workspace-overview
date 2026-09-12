@@ -105,19 +105,7 @@ export async function readAutoCommitInfo(): Promise<{
   recentMessages: string[];
 }> {
   const projectDirectory = await findPluginGitDirectory();
-  const [status, currentBranch, log] = await Promise.all([
-    runGit(projectDirectory, ["status", "--short"]),
-    tryGit(projectDirectory, ["symbolic-ref", "--quiet", "--short", "HEAD"]),
-    tryGit(projectDirectory, ["log", "--format=%s", "-8"]),
-  ]);
-
-  return {
-    cwd: projectDirectory,
-    currentBranch,
-    hasChanges: status.length > 0,
-    status,
-    recentMessages: (log ?? "").split("\n").filter(Boolean),
-  };
+  return readAutoCommitInfoForDirectory(projectDirectory);
 }
 
 async function readAutoCommitInfoForDirectory(projectDirectory: string): Promise<{
@@ -159,6 +147,11 @@ function appendTaskOutput(task: AutoCommitTask, chunk: Buffer | string) {
   task.output = `${task.output}${chunk.toString()}`.slice(-20_000);
 }
 
+function scheduleTaskCleanup(taskId: string) {
+  const timer = setTimeout(() => tasks.delete(taskId), 10 * 60_000);
+  timer.unref();
+}
+
 export async function startAutoCommitTask({ cwd }: { cwd: string }): Promise<{ taskId: string; cwd: string }> {
   const info = await readAutoCommitInfoForDirectory(cwd);
   if (!info.hasChanges) {
@@ -189,12 +182,14 @@ export async function startAutoCommitTask({ cwd }: { cwd: string }): Promise<{ t
     task.status = "error";
     task.error = error.message;
     task.finishedAt = new Date().toISOString();
+    scheduleTaskCleanup(task.taskId);
   });
   child.on("close", (code) => {
     task.exitCode = code;
     task.status = code === 0 ? "done" : "error";
     task.error = code === 0 ? null : task.error ?? `pi 进程退出，exit code ${code}`;
     task.finishedAt = new Date().toISOString();
+    scheduleTaskCleanup(task.taskId);
   });
 
   return { taskId: task.taskId, cwd: task.cwd };
