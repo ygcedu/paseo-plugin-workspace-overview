@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { ScrollView, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 import type { AgentTimelineEntry } from "./agent-conversation-types";
 import { PaseoTimelineItem } from "./PaseoTimelineItem";
@@ -28,8 +28,12 @@ function timelineBlocks(entries: AgentTimelineEntry[]): TimelineBlock[] {
   return blocks;
 }
 
-export function AgentConversationTimeline({ entries, pendingPermissions, respondingRequestId, onRespond, theme, compact }: {
+export function AgentConversationTimeline({ entries, hasOlder, loadingOlder, onLoadOlder, scrollToEndVersion, pendingPermissions, respondingRequestId, onRespond, theme, compact }: {
   entries: AgentTimelineEntry[];
+  hasOlder: boolean;
+  loadingOlder: boolean;
+  onLoadOlder: () => void;
+  scrollToEndVersion: number;
   pendingPermissions: AgentPermissionRequest[];
   respondingRequestId: string | null;
   onRespond: (requestId: string, response: AgentPermissionResponse) => void;
@@ -40,10 +44,19 @@ export function AgentConversationTimeline({ entries, pendingPermissions, respond
   useEffect(() => {
     const timer = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: false }), 0);
     return () => clearTimeout(timer);
-  }, [entries.length, pendingPermissions.length]);
+  }, [pendingPermissions.length, scrollToEndVersion]);
   return (
     <ScrollView ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 14, paddingBottom: 24 }}>
       <View>
+        {hasOlder ? <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="加载更早消息"
+          disabled={loadingOlder}
+          onPress={onLoadOlder}
+          style={{ alignSelf: "center", minHeight: 32, paddingHorizontal: 12, marginBottom: 12, borderRadius: 6, borderWidth: 1, borderColor: theme.colors.border, alignItems: "center", justifyContent: "center", opacity: loadingOlder ? 0.65 : 1 }}
+        >
+          {loadingOlder ? <ActivityIndicator size="small" color={theme.colors.foregroundMuted} /> : <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12 }}>加载更早消息</Text>}
+        </Pressable> : null}
         {timelineBlocks(entries).map((block) => block.kind === "tools"
           ? <PaseoToolCallGroup key={`tools-${block.entries[0]?.seqStart}`} entries={block.entries} theme={theme} />
           : <PaseoTimelineItem key={`${block.entry.seqStart}:${block.entry.item.type}`} entry={block.entry} theme={theme} />)}

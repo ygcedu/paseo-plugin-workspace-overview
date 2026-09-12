@@ -15,6 +15,8 @@ import { useAutoCommit } from "../agent-preview/useAutoCommit";
 import { AutoCommitErrorToast, QuickActionButton } from "../agent-preview/PreviewActions";
 import type { AgentPermissionRequest, AgentPermissionResponse } from "@getpaseo/protocol/agent-types";
 
+type AgentTimelineCursor = { epoch: string; seq: number };
+
 function getColors(theme: PluginSurfaceProps["theme"]) {
   const fallback = {
     surface0: "#1e1e1e",
@@ -65,7 +67,13 @@ export function AgentConversationPreview({
   const [liveStatus, setLiveStatus] = useState(agent.status);
   const [pendingPermissions, setPendingPermissions] = useState<AgentPermissionRequest[]>([]);
   const [respondingRequestId, setRespondingRequestId] = useState<string | null>(null);
+  const [startCursor, setStartCursor] = useState<AgentTimelineCursor | null>(null);
+  const [hasOlder, setHasOlder] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [scrollToEndVersion, setScrollToEndVersion] = useState(0);
   const loadingRef = useRef(false);
+  const historyInitializedRef = useRef(false);
+  const latestSeqRef = useRef<number | undefined>(undefined);
   const setAgentConfig = useRpc(agentConfigSetRpc);
   const commitCwd = workspaceDirectory ?? agent.cwd;
 
@@ -74,7 +82,22 @@ export function AgentConversationPreview({
     loadingRef.current = true;
     try {
       const page = await handle.timeline.refetch({ direction: "tail", projection: "projected", limit: 200 });
-      setEntries(page.entries);
+      const nextLatest = page.entries.at(-1)?.seqStart;
+      if (latestSeqRef.current !== nextLatest) {
+        latestSeqRef.current = nextLatest;
+        setScrollToEndVersion((version) => version + 1);
+      }
+      setEntries((current) => {
+        if (current.length === 0) return page.entries;
+        const merged = new Map(current.map((entry) => [entry.seqStart, entry]));
+        for (const entry of page.entries) merged.set(entry.seqStart, entry);
+        return Array.from(merged.values()).sort((left, right) => left.seqStart - right.seqStart);
+      });
+      if (!historyInitializedRef.current) {
+        historyInitializedRef.current = true;
+        setStartCursor(page.startCursor);
+        setHasOlder(page.hasOlder);
+      }
       setError(page.error);
       const agentSnapshot = (page as { agent?: { status?: string; currentModeId?: string | null } | null }).agent;
       const permissions = (page as { agent?: { pendingPermissions?: AgentPermissionRequest[] } | null }).agent?.pendingPermissions
@@ -93,6 +116,27 @@ export function AgentConversationPreview({
       setLoading(false);
     }
   }, [handle]);
+
+  const loadOlder = useCallback(async () => {
+    if (!startCursor || !hasOlder || loadingOlder) return;
+    setLoadingOlder(true);
+    setError(null);
+    try {
+      const page = await handle.timeline.refetch({ direction: "before", cursor: startCursor, projection: "projected", limit: 200 });
+      setEntries((current) => {
+        const merged = new Map(current.map((entry) => [entry.seqStart, entry]));
+        for (const entry of page.entries) merged.set(entry.seqStart, entry);
+        return Array.from(merged.values()).sort((left, right) => left.seqStart - right.seqStart);
+      });
+      setStartCursor(page.startCursor);
+      setHasOlder(page.hasOlder);
+      if (page.error) setError(page.error);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : String(loadError));
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [handle, hasOlder, loadingOlder, startCursor]);
 
   const respondToPermission = useCallback(async (requestId: string, response: AgentPermissionResponse) => {
     if (respondingRequestId) return;
@@ -129,6 +173,10 @@ export function AgentConversationPreview({
 
   useEffect(() => {
     setEntries([]);
+    historyInitializedRef.current = false;
+    latestSeqRef.current = undefined;
+    setStartCursor(null);
+    setHasOlder(false);
     setLoading(true);
     void refresh();
     const unsubscribe = handle.timeline.subscribe(() => void refresh());
@@ -340,6 +388,10 @@ export function AgentConversationPreview({
         <View style={{ flex: 1 }}>
           <AgentConversationTimeline
             entries={entries}
+            hasOlder={hasOlder}
+            loadingOlder={loadingOlder}
+            onLoadOlder={() => void loadOlder()}
+            scrollToEndVersion={scrollToEndVersion}
             pendingPermissions={pendingPermissions}
             respondingRequestId={respondingRequestId}
             onRespond={(requestId, response) => void respondToPermission(requestId, response)}
