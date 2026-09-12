@@ -1,12 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useRpc } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import { Pressable, Text, View, type TextStyle, type ViewStyle } from "react-native";
 import { WorkspaceCreateComposer } from "./WorkspaceCreateComposer";
 import { ResizeHandle } from "./ResizeHandle";
-import { buildSelection, submitWorkspacePrompt, defaultSelection, providerById, PROVIDER_READY_TIMEOUT_MS, readPaseoProviderModelPreference, selectableModels, type ComposerSelection, type Isolation, type LaunchTarget, type OpenMenu, type ProviderSnapshot, type TerminalProfile, type WorkspaceCreatorPanelProps } from "./workspace-creator-shared";
+import { buildSelection, submitWorkspacePrompt, providerById, selectableModels, type Isolation, type LaunchTarget, type OpenMenu, type WorkspaceCreatorPanelProps } from "./workspace-creator-shared";
 import { terminalLaunchRpc } from "../../shared/terminal-launch";
-import { DEFAULT_TERMINAL_PROFILES } from "../workspace-creator/constants";
+import { useProviderCatalog, useTerminalProfiles } from "../workspace-creator/useProviderCatalog";
 
 export function WorkspaceCreatorPanel({
   projectId,
@@ -24,9 +24,6 @@ export function WorkspaceCreatorPanel({
 }: WorkspaceCreatorPanelProps) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [providerLoading, setProviderLoading] = useState(false);
-  const [snapshot, setSnapshot] = useState<ProviderSnapshot | null>(null);
-  const [selection, setSelection] = useState<ComposerSelection | null>(null);
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
   const [prompt, setPrompt] = useState("");
   const [selectedProjectId, setSelectedProjectId] = useState(projectId);
@@ -36,25 +33,7 @@ export function WorkspaceCreatorPanel({
     return initialProject?.defaultBranch ?? initialProject?.branches[0]?.id ?? "main";
   });
   const [launchTarget, setLaunchTarget] = useState<LaunchTarget>({ kind: "chat" });
-  const [terminalProfiles, setTerminalProfiles] = useState<TerminalProfile[]>(DEFAULT_TERMINAL_PROFILES);
   const launchTerminal = useRpc(terminalLaunchRpc);
-
-  useEffect(() => {
-    let cancelled = false;
-    void paseo.config.get().then(({ config }: { config: { terminalProfiles?: Array<{ id: string; name: string; command: string; args?: string[]; icon?: string }> } }) => {
-      if (cancelled || !Array.isArray(config.terminalProfiles)) return;
-      setTerminalProfiles(
-        config.terminalProfiles.map((profile) => ({
-          id: profile.id,
-          name: profile.name,
-          command: profile.command,
-          args: profile.args ?? [],
-          icon: profile.icon,
-        })),
-      );
-    }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [paseo]);
 
   const selectedProject = useMemo(
     () =>
@@ -67,57 +46,10 @@ export function WorkspaceCreatorPanel({
       },
     [projectDirectory, projectDisplayName, projectId, projects, selectedProjectId],
   );
-
-  useEffect(() => {
-    if (!selectedProject.projectDirectory) return;
-    let cancelled = false;
-    setProviderLoading(true);
-    setError(null);
-    const loadProviders = async (): Promise<ProviderSnapshot> => {
-      const initial = await paseo.providers.snapshot({ cwd: selectedProject.projectDirectory }) as ProviderSnapshot;
-      const entries = await Promise.all(initial.entries.map(async (entry) => {
-        if (entry.enabled === false) return entry;
-        const provider = entry.provider as Parameters<typeof paseo.providers.listModels>[0];
-        const [modelsResult, modesResult] = await Promise.allSettled([
-          paseo.providers.listModels(provider, { cwd: selectedProject.projectDirectory }),
-          paseo.providers.listModes(provider, { cwd: selectedProject.projectDirectory }),
-        ]);
-        const models = modelsResult.status === "fulfilled" ? modelsResult.value.models : entry.models;
-        const modes = modesResult.status === "fulfilled" ? modesResult.value.modes : entry.modes;
-        return {
-          ...entry,
-          status: models?.length ? "ready" : entry.status,
-          models,
-          modes,
-          defaultModeId: entry.defaultModeId,
-        };
-      }));
-      return { ...initial, entries };
-    };
-    void Promise.race([
-      loadProviders(),
-      paseo.providers.waitForReady({ cwd: selectedProject.projectDirectory, timeoutMs: PROVIDER_READY_TIMEOUT_MS }) as Promise<ProviderSnapshot>,
-    ])
-      .then((nextSnapshot: ProviderSnapshot) => {
-        if (cancelled) return;
-        setSnapshot(nextSnapshot);
-        setSelection((current) => {
-          if (current) return current;
-          return defaultSelection(nextSnapshot, readPaseoProviderModelPreference());
-        });
-      })
-      .catch((loadError: unknown) => {
-        if (cancelled) return;
-        const message = loadError instanceof Error ? loadError.message : String(loadError);
-        setError(message);
-      })
-      .finally(() => {
-        if (!cancelled) setProviderLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [paseo, selectedProject.projectDirectory]);
+  const terminalProfiles = useTerminalProfiles(paseo);
+  const providerCatalog = useProviderCatalog(paseo, selectedProject.projectDirectory);
+  const { snapshot, selection, setSelection, loading: providerLoading } = providerCatalog;
+  const visibleError = error ?? providerCatalog.error;
 
   const selectProject = useCallback(
     (nextProjectId: string) => {
@@ -129,8 +61,6 @@ export function WorkspaceCreatorPanel({
           ? baseBranch
           : nextProject.defaultBranch ?? nextProject.branches[0]?.id ?? "main",
       );
-      setSnapshot(null);
-      setSelection(null);
       setOpenMenu(null);
     },
     [baseBranch, projects],
@@ -284,7 +214,7 @@ export function WorkspaceCreatorPanel({
           isolation={isolation}
           baseBranch={baseBranch}
           pending={pending}
-          error={error}
+          error={visibleError}
           providerLoading={providerLoading}
           snapshot={snapshot}
           selection={selection}
