@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
-import { createBadgeStyles } from "./workspace-creator-styles";
+import { createBadgeStyles } from "../workspace-creator/badge-styles";
 
 export function Badge({
   icon,

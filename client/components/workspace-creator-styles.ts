@@ -161,69 +161,6 @@ export function createComposerStyles(theme: PluginSurfaceProps["theme"]) {
   });
 }
 
-export function createBadgeStyles(theme: PluginSurfaceProps["theme"]) {
-  const colors = theme.colors;
-  return StyleSheet.create({
-    badge: {
-      flexDirection: "row",
-      alignItems: "center",
-      height: 28,
-      maxWidth: 240,
-      overflow: "hidden",
-      borderRadius: 16,
-      gap: 4,
-    } as ViewStyle,
-    badgeSelectable: {
-    } as ViewStyle,
-    badgeDisabled: {
-      opacity: 0.5,
-    } as ViewStyle,
-    badgeIcon: {
-      width: 16,
-      height: 16,
-      alignItems: "center",
-      justifyContent: "center",
-      flexShrink: 0,
-    } as ViewStyle,
-    badgeText: {
-      minWidth: 0,
-      fontSize: 14,
-      lineHeight: 20,
-      color: colors.foregroundMuted,
-      flexShrink: 1,
-    } as TextStyle,
-  });
-}
-
-export function createControlStyles(theme: PluginSurfaceProps["theme"]) {
-  const colors = theme.colors;
-  return StyleSheet.create({
-    control: {
-      minHeight: 28,
-      maxWidth: 220,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 4,
-      paddingHorizontal: 8,
-      borderRadius: 14,
-    } as ViewStyle,
-    controlOpen: {
-      backgroundColor: colors.foregroundMuted + "12",
-    } as ViewStyle,
-    controlDisabled: {
-      opacity: 0.55,
-    } as ViewStyle,
-    controlValue: {
-      color: colors.foregroundMuted,
-      fontSize: 14,
-      lineHeight: 18,
-      fontWeight: "400",
-      minWidth: 0,
-      maxWidth: 150,
-    } as TextStyle,
-  });
-}
-
 export function createMenuStyles(theme: PluginSurfaceProps["theme"]) {
   const colors = theme.colors;
   const menuBackground = opaqueSurfaceColor(colors.surface0, colors.foreground);

@@ -5,7 +5,7 @@ import { Icon } from "@getpaseo/plugin/client/react-native";
 import { ControlGlyph } from "./ControlGlyph";
 import { ProviderBrandIcon } from "./ProviderBrandIcon";
 import type { OpenMenu } from "../workspace-creator/types";
-import { createControlStyles } from "./workspace-creator-styles";
+import { createControlStyles } from "../workspace-creator/control-styles";
 
 export function SelectControl({
   kind,
