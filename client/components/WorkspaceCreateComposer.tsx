@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from "react";
+import React, { useMemo } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
@@ -35,6 +35,9 @@ export function WorkspaceCreateComposer({
   onSelectThinking,
   onSelectLaunchTarget,
   theme,
+  prompt,
+  onPromptChange,
+  onSubmit,
 }: {
   project: WorkspaceProjectOption | null;
   hostLabel: string;
@@ -59,47 +62,11 @@ export function WorkspaceCreateComposer({
   onSelectThinking: (thinkingId: string) => void;
   onSelectLaunchTarget: (target: LaunchTarget) => void;
   theme: PluginSurfaceProps["theme"];
+  prompt: string;
+  onPromptChange: (value: string) => void;
+  onSubmit: () => void | Promise<void>;
 }) {
   const styles = useMemo(() => createComposerStyles(theme), [theme]);
-
-  useEffect(() => {
-    if (openMenu === null || typeof document === "undefined") return;
-
-    const closeOnOutsidePress = (event: PointerEvent) => {
-      const target = event.target;
-      if (target instanceof Element && target.closest('[id^="workspace-create-dropdown-"]')) {
-        return;
-      }
-      onToggleMenu(null);
-    };
-
-    document.addEventListener("pointerdown", closeOnOutsidePress, true);
-    return () => document.removeEventListener("pointerdown", closeOnOutsidePress, true);
-  }, [onToggleMenu, openMenu]);
-
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    const style = document.createElement("style");
-    style.dataset.workspaceCreateDialog = "true";
-    style.textContent = `
-      #workspace-create-prompt:focus,
-      #workspace-create-prompt:focus-visible {
-        outline: none !important;
-        border: 0 !important;
-        box-shadow: none !important;
-      }
-      [id^="workspace-create-menu-search-"]:focus,
-      [id^="workspace-create-menu-search-"]:focus-visible,
-      #workspace-create-model-search:focus,
-      #workspace-create-model-search:focus-visible {
-        outline: none !important;
-        border: 0 !important;
-        box-shadow: none !important;
-      }
-    `;
-    document.head.appendChild(style);
-    return () => style.remove();
-  }, []);
 
   const selectedTerminalProfile = launchTarget.kind === "terminal"
     ? terminalProfiles.find((profile) => profile.id === launchTarget.profileId) ?? null
@@ -233,6 +200,9 @@ export function WorkspaceCreateComposer({
           showAgentControls={launchTarget.kind === "chat"}
           autoFocus
           pendingLabel={pending ? "Sending" : null}
+          value={prompt}
+          onChangeText={onPromptChange}
+          onSubmit={onSubmit}
         />
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
       </View>

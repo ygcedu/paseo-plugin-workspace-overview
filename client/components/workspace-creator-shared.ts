@@ -1,5 +1,4 @@
 import type { Dispatch, SetStateAction } from "react";
-import type { ChatModelAdapter, ChatModelRunOptions } from "@assistant-ui/react-native";
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 
 export type PaseoClient = ReturnType<typeof import("@getpaseo/plugin/client").usePaseo>;
@@ -98,7 +97,6 @@ export interface MenuOption {
 }
 
 const WORKTREE_SLUG_PREFIX = "workspace";
-const PASEO_CREATE_AGENT_PREFERENCES_KEY = "@paseo:create-agent-preferences";
 export const PROVIDER_READY_TIMEOUT_MS = 10000;
 export const MAX_MENU_HEIGHT = 260;
 export const MENU_WIDTH_BY_KIND: Record<Exclude<OpenMenu, null>, number> = {
@@ -118,35 +116,7 @@ function createWorktreeSlug(): string {
 }
 
 export function readPaseoProviderModelPreference(): PaseoProviderModelPreference | null {
-  if (typeof globalThis.localStorage === "undefined") return null;
-  try {
-    const raw = globalThis.localStorage.getItem(PASEO_CREATE_AGENT_PREFERENCES_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as {
-      provider?: unknown;
-      providerPreferences?: Record<string, { model?: unknown }>;
-    };
-    if (typeof parsed.provider !== "string" || !parsed.provider.trim()) return null;
-    const model = parsed.providerPreferences?.[parsed.provider]?.model;
-    return {
-      providerId: parsed.provider,
-      modelId: typeof model === "string" && model.trim() ? model : null,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function getSubmittedText(options: ChatModelRunOptions): string {
-  const message = options.messages
-    .slice()
-    .reverse()
-    .find((entry) => entry.role === "user");
-  if (!message) return "";
-  return message.content
-    .map((part) => (part.type === "text" ? part.text : ""))
-    .join("")
-    .trim();
+  return null;
 }
 
 export function readyProviders(snapshot: ProviderSnapshot): ProviderEntry[] {
@@ -244,7 +214,7 @@ async function ensureSelection(input: {
   return selection;
 }
 
-export function createWorkspaceChatModel(input: {
+export async function submitWorkspacePrompt(input: {
   project: WorkspaceProjectOption | null;
   isolation: Isolation;
   baseBranch: string;
@@ -266,19 +236,15 @@ export function createWorkspaceChatModel(input: {
   setPending: (pending: boolean) => void;
   setError: (error: string | null) => void;
   onDone: () => void;
-}): ChatModelAdapter {
-  return {
-    async run(options) {
-      const prompt = getSubmittedText(options);
-      if (!prompt || !input.project) {
-        return { content: [] };
-      }
+}, prompt: string): Promise<void> {
+  prompt = prompt.trim();
+  if (!prompt || !input.project) return;
 
-      input.setPending(true);
-      input.setError(null);
+  input.setPending(true);
+  input.setError(null);
 
-      try {
-        if (input.launchTarget.kind === "terminal") {
+  try {
+    if (input.launchTarget.kind === "terminal") {
           const workspace = await input.paseo.workspaces.create({
             source:
               input.isolation === "worktree"
@@ -304,7 +270,7 @@ export function createWorkspaceChatModel(input: {
             profileId === "blank"
               ? null
               : input.terminalProfiles.find((item) => item.id === profileId) ?? null;
-          const { terminalId } = await input.launchTerminal({
+          await input.launchTerminal({
             workspaceDirectory,
             workspaceId: workspace.id,
             serverId: input.serverId,
@@ -313,12 +279,8 @@ export function createWorkspaceChatModel(input: {
               ? { name: profile.name, command: profile.command, args: profile.args }
               : null,
           });
-          if (typeof globalThis.location !== "undefined") {
-            const route = `paseo://app/h/${encodeURIComponent(input.serverId)}/workspace/${encodeURIComponent(workspace.id)}?open=${encodeURIComponent(`terminal:${terminalId}`)}`;
-            globalThis.location.assign(route);
-          }
           input.onDone();
-          return { content: [] };
+          return;
         }
 
         const selection = await ensureSelection({
@@ -362,19 +324,12 @@ export function createWorkspaceChatModel(input: {
         await input.openAgent(agent.id);
 
         input.onDone();
-        return { content: [] };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        input.setError(message);
-        return {
-          content: [{ type: "text", text: message }],
-          status: { type: "incomplete", reason: "error", error: { message } },
-        };
-      } finally {
-        input.setPending(false);
-      }
-    },
-  };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    input.setError(message);
+  } finally {
+    input.setPending(false);
+  }
 }
 
 export function providerById(snapshot: ProviderSnapshot | null, providerId: string): ProviderEntry | null {

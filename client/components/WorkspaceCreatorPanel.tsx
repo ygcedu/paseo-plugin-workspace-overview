@@ -1,9 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Text } from "react-native";
-import { AssistantRuntimeProvider, useLocalRuntime } from "@assistant-ui/react-native";
 import { useRpc } from "@getpaseo/plugin/client";
 import { WorkspaceCreateComposer } from "./WorkspaceCreateComposer";
-import { buildSelection, createWorkspaceChatModel, defaultSelection, providerById, PROVIDER_READY_TIMEOUT_MS, readPaseoProviderModelPreference, selectableModels, type ComposerSelection, type Isolation, type LaunchTarget, type OpenMenu, type ProviderSnapshot, type TerminalProfile, type WorkspaceCreatorPanelProps } from "./workspace-creator-shared";
+import { buildSelection, submitWorkspacePrompt, defaultSelection, providerById, PROVIDER_READY_TIMEOUT_MS, readPaseoProviderModelPreference, selectableModels, type ComposerSelection, type Isolation, type LaunchTarget, type OpenMenu, type ProviderSnapshot, type TerminalProfile, type WorkspaceCreatorPanelProps } from "./workspace-creator-shared";
 import { terminalLaunchRpc } from "../../shared/terminal-launch";
 
 const DEFAULT_TERMINAL_PROFILES: TerminalProfile[] = [
@@ -32,6 +31,7 @@ export function WorkspaceCreatorPanel({
   const [snapshot, setSnapshot] = useState<ProviderSnapshot | null>(null);
   const [selection, setSelection] = useState<ComposerSelection | null>(null);
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
+  const [prompt, setPrompt] = useState("");
   const [selectedProjectId, setSelectedProjectId] = useState(projectId);
   const [isolation, setIsolation] = useState<Isolation>("worktree");
   const [baseBranch, setBaseBranch] = useState(() => {
@@ -178,9 +178,8 @@ export function WorkspaceCreatorPanel({
     [selection?.modelId, selection?.providerId, snapshot],
   );
 
-  const chatModel = useMemo(
-    () =>
-      createWorkspaceChatModel({
+  const submit = useCallback(async () => {
+    await submitWorkspacePrompt({
         project: selectedProject.projectDirectory ? selectedProject : null,
         isolation,
         baseBranch,
@@ -199,10 +198,11 @@ export function WorkspaceCreatorPanel({
           onCreate?.();
           onClose();
         },
-      }),
-    [baseBranch, hostId, isolation, launchTarget, launchTerminal, navigation, onClose, onCreate, paseo, selectedProject, selection, snapshot, terminalProfiles],
+    }, prompt);
+    setPrompt("");
+  },
+    [baseBranch, hostId, isolation, launchTarget, launchTerminal, navigation, onClose, onCreate, paseo, prompt, selectedProject, selection, snapshot, terminalProfiles],
   );
-  const runtime = useLocalRuntime(chatModel);
 
   const close = useCallback(() => {
     if (pending) return;
@@ -212,8 +212,7 @@ export function WorkspaceCreatorPanel({
   }, [onClose, pending]);
 
   return (
-    <AssistantRuntimeProvider runtime={runtime}>
-      <WorkspaceCreateComposer
+    <WorkspaceCreateComposer
         project={selectedProject.projectDirectory ? selectedProject : null}
         hostLabel={hostLabel}
         projects={projects}
@@ -240,7 +239,9 @@ export function WorkspaceCreatorPanel({
           setOpenMenu(null);
         }}
         theme={theme}
-      />
-    </AssistantRuntimeProvider>
+        prompt={prompt}
+        onPromptChange={setPrompt}
+        onSubmit={submit}
+    />
   );
 }

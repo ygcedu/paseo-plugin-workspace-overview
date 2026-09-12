@@ -1,15 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Text, View, type TextStyle, type ViewStyle } from "react-native";
-import {
-  AssistantRuntimeProvider,
-  ThreadPrimitive,
-  useLocalRuntime,
-  type ChatModelAdapter,
-  type ChatModelRunOptions,
-  type ThreadMessageLike,
-} from "@assistant-ui/react-native";
 import { useRpc, type PluginSurfaceProps } from "@getpaseo/plugin/client";
-import { Icon } from "@getpaseo/plugin/client/react-native";
+import { copyText, Icon } from "@getpaseo/plugin/client/react-native";
 import type { PaseoClient } from "./workspace-creator-shared";
 import type { AgentEntry } from "../../shared/overview-types";
 import { autoCommitStartRpc, autoCommitStatusRpc } from "../../shared/auto-commit";
@@ -44,51 +36,6 @@ function getColors(theme: PluginSurfaceProps["theme"]) {
     return fallback;
   }
   return { ...fallback, ...theme.colors };
-}
-
-function submittedText(options: ChatModelRunOptions): string {
-  const user = [...options.messages].reverse().find((message) => message.role === "user");
-  if (!user) return "";
-  return user.content
-    .filter((part): part is Extract<(typeof user.content)[number], { type: "text" }> => part.type === "text")
-    .map((part) => part.text)
-    .join("\n")
-    .trim();
-}
-
-function toolSummary(item: AgentTimelineEntry["item"]): string {
-  const detail = item.detail as { command?: string; path?: string; description?: string };
-  const subject = detail.command ?? detail.path ?? detail.description;
-  return [`Tool: ${item.name}`, subject, `Status: ${item.status}`].filter(Boolean).join("\n");
-}
-
-function timelineMessages(entries: AgentTimelineEntry[]): ThreadMessageLike[] {
-  const messages: ThreadMessageLike[] = [];
-  const messageIds = new Map<string, number>();
-
-  const nextMessageId = (entry: AgentTimelineEntry): string => {
-    // Provider message IDs identify a logical message and may legitimately be
-    // repeated across projected timeline entries while that message streams.
-    // assistant-ui requires every repository node ID to be unique, so key its
-    // local nodes by the timeline entry instead and guard the unlikely case
-    // where one projection emits the same type and sequence more than once.
-    const base = `timeline-${entry.seqStart}-${entry.item.type}`;
-    const occurrence = messageIds.get(base) ?? 0;
-    messageIds.set(base, occurrence + 1);
-    return occurrence === 0 ? base : `${base}-${occurrence}`;
-  };
-
-  for (const entry of entries) {
-    const item = entry.item;
-    const base = { id: nextMessageId(entry), createdAt: new Date(entry.timestamp) };
-    if (item.type === "user_message") messages.push({ ...base, role: "user", content: item.text });
-    else if (item.type === "assistant_message") messages.push({ ...base, role: "assistant", content: item.text });
-    else if (item.type === "reasoning") messages.push({ ...base, role: "assistant", content: [{ type: "reasoning", text: item.text }] });
-    else if (item.type === "tool_call") messages.push({ ...base, role: "assistant", content: toolSummary(item) });
-    else if (item.type === "todo") messages.push({ ...base, role: "assistant", content: item.items.map((todo: { completed: boolean; text: string }) => `${todo.completed ? "[x]" : "[ ]"} ${todo.text}`).join("\n") });
-    else if (item.type === "error") messages.push({ ...base, role: "assistant", content: `Error: ${item.message}` });
-  }
-  return messages;
 }
 
 function selectionFromAgent(snapshot: ProviderSnapshot, agent: AgentEntry | Record<string, unknown>): ComposerSelection | null {
@@ -208,7 +155,7 @@ export function AgentConversationPreview({
 }) {
   const handle = useMemo(() => paseo.agents.ref(agent.id), [agent.id, paseo]);
   const [entries, setEntries] = useState<AgentTimelineEntry[]>([]);
-  const [messages, setMessages] = useState<ThreadMessageLike[]>([]);
+  const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
@@ -286,7 +233,6 @@ export function AgentConversationPreview({
     try {
       const page = await handle.timeline.refetch({ direction: "tail", projection: "projected", limit: 200 });
       setEntries(page.entries);
-      setMessages(timelineMessages(page.entries));
       setError(page.error);
       const agentSnapshot = (page as { agent?: { status?: string; currentModeId?: string | null } | null }).agent;
       if (agentSnapshot?.status) {
@@ -366,13 +312,7 @@ export function AgentConversationPreview({
 
   const handleCopyAutoCommitError = useCallback(() => {
     if (autoCommitState.kind !== "error") return;
-    const clipboard = typeof navigator !== "undefined"
-      ? (navigator as { clipboard?: { writeText(t: string): Promise<void> } }).clipboard
-      : null;
-    if (clipboard) {
-      void clipboard.writeText(autoCommitState.message);
-    }
-    setAutoCommitCopied(true);
+    void copyText(autoCommitState.message).then(() => setAutoCommitCopied(true)).catch(() => {});
   }, [autoCommitState]);
 
   const handleCancel = useCallback(async () => {
@@ -408,7 +348,6 @@ export function AgentConversationPreview({
   }, [agent.id, agent.status, handle]);
 
   useEffect(() => {
-    setMessages([]);
     setEntries([]);
     setLoading(true);
     void refresh();
@@ -417,21 +356,14 @@ export function AgentConversationPreview({
     return () => { unsubscribe(); clearInterval(timer); };
   }, [agent.id, agent.status, handle, refresh]);
 
-  const chatModel = useMemo<ChatModelAdapter>(() => ({
-    async run(options) {
-      const text = submittedText(options);
-      if (!text) return { content: [] };
-      await handle.send(text);
-      setLiveStatus("running");
-      setTimeout(() => void refresh(), 250);
-      return { content: [] };
-    },
-  }), [handle, refresh]);
-  const runtime = useLocalRuntime(chatModel, { initialMessages: messages });
-
-  useEffect(() => {
-    runtime.thread.reset(messages);
-  }, [messages, runtime]);
+  const submit = useCallback(async () => {
+    const text = prompt.trim();
+    if (!text) return;
+    await handle.send(text);
+    setPrompt("");
+    setLiveStatus("running");
+    setTimeout(() => void refresh(), 250);
+  }, [handle, prompt, refresh]);
 
   const colors = getColors(theme);
   const composerStyles = useMemo(() => createComposerStyles(theme), [theme]);
@@ -528,8 +460,7 @@ export function AgentConversationPreview({
           : colors.foregroundMuted;
 
   return (
-    <AssistantRuntimeProvider runtime={runtime}>
-      <ResizeHandle
+    <ResizeHandle
         theme={theme}
         side="left"
         variant="grip"
@@ -548,7 +479,7 @@ export function AgentConversationPreview({
         </View>
         {loading ? <Text style={{ color: colors.foregroundMuted, padding: 16 }}>加载会话中…</Text> : null}
         {error ? <Text style={{ color: colors.statusDanger, padding: 16 }}>{error}</Text> : null}
-        <ThreadPrimitive.Root style={{ flex: 1 }}>
+        <View style={{ flex: 1 }}>
           <AgentConversationTimeline entries={entries} theme={theme} />
           {autoCommitState.kind === "error" ? (
             <View style={styles.autoCommitToast}>
@@ -640,9 +571,11 @@ export function AgentConversationPreview({
             placeholder="继续跟进这个 Agent…"
             theme={theme}
             autoFocus
+            value={prompt}
+            onChangeText={setPrompt}
+            onSubmit={submit}
           />
-        </ThreadPrimitive.Root>
-      </ResizeHandle>
-    </AssistantRuntimeProvider>
+        </View>
+    </ResizeHandle>
   );
 }

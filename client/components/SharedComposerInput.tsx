@@ -1,8 +1,7 @@
 import React, { useMemo } from "react";
 import { Pressable, Text, View } from "react-native";
-import { ComposerPrimitive, useAuiState } from "@assistant-ui/react-native";
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
-import { Icon } from "@getpaseo/plugin/client/react-native";
+import { Icon, TextInput } from "@getpaseo/plugin/client/react-native";
 import { ModelBrowserMenu } from "./ModelBrowserMenu";
 import { Menu } from "./WorkspaceMenu";
 import { SelectControl } from "./WorkspaceSelectControl";
@@ -63,6 +62,9 @@ export interface SharedComposerInputProps {
   autoFocus?: boolean;
   inputNativeID?: string;
   pendingLabel?: string | null;
+  value: string;
+  onChangeText: (value: string) => void;
+  onSubmit: () => void | Promise<void>;
 }
 
 export function SharedComposerInput({
@@ -84,11 +86,13 @@ export function SharedComposerInput({
   autoFocus = false,
   inputNativeID = "workspace-create-prompt",
   pendingLabel = null,
+  value,
+  onChangeText,
+  onSubmit,
 }: SharedComposerInputProps) {
   const colors = getColors(theme);
   const styles = useMemo(() => createComposerStyles(theme), [theme]);
-  const composerText = useAuiState((state) => state.composer.text);
-  const hasInput = composerText.trim().length > 0;
+  const hasInput = value.trim().length > 0;
 
   // Derived state for selectors (mirrors WorkspaceCreateComposer)
   const currentProvider = providerById(snapshot, selection?.providerId ?? "");
@@ -122,8 +126,8 @@ export function SharedComposerInput({
     openMenu === "model" || openMenu === "mode" || openMenu === "thinking";
 
   return (
-    <ComposerPrimitive.Root style={[styles.inputWrapper, composerMenuOpen && styles.menuRegionActive]}>
-      <ComposerPrimitive.Input
+    <View style={[styles.inputWrapper, composerMenuOpen && styles.menuRegionActive]}>
+      <TextInput
         nativeID={inputNativeID}
         style={styles.textInput}
         placeholder={placeholder}
@@ -131,6 +135,8 @@ export function SharedComposerInput({
         multiline
         autoFocus={autoFocus}
         editable={!disabled}
+        value={value}
+        onChangeText={onChangeText}
       />
 
       <View style={styles.buttonRow}>
@@ -217,12 +223,18 @@ export function SharedComposerInput({
               <Icon name={isCancelling ? "Loader" : "Square"} color="#fff" size={14} />
             </Pressable>
           ) : (
-            <ComposerPrimitive.Send disabled={disabled} style={[styles.sendButton, disabled && styles.disabled]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="发送"
+              disabled={disabled || !hasInput}
+              onPress={() => void onSubmit()}
+              style={[styles.sendButton, (disabled || !hasInput) && styles.disabled]}
+            >
               <Icon name="CornerDownLeft" color={colors.accentForeground} size={16} />
-            </ComposerPrimitive.Send>
+            </Pressable>
           )}
         </View>
       </View>
-    </ComposerPrimitive.Root>
+    </View>
   );
 }

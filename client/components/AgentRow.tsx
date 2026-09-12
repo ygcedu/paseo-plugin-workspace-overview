@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Easing, Text, TouchableOpacity, View, type ViewStyle, type TextStyle } from "react-native";
 import { type PluginSurfaceProps } from "@getpaseo/plugin/client";
+import { copyText } from "@getpaseo/plugin/client/react-native";
 import { type AgentEntry } from "../../shared/overview-types";
 import { BadgeWithTooltip } from "./Tooltip";
 import { statusColor, statusRowBackground } from "./Tooltip";
@@ -71,11 +72,7 @@ export function AgentRow({ agent, theme, compact, onSelect }: { agent: AgentEntr
   );
 
   const handleLongPress = useCallback(() => {
-    const didCopy = typeof navigator !== "undefined" && (navigator as { clipboard?: { writeText(t: string): Promise<void> } }).clipboard;
-    if (didCopy) {
-      void (navigator as { clipboard: { writeText(t: string): Promise<void> } }).clipboard.writeText(agent.id);
-    }
-    setCopied(true);
+    void copyText(agent.id).then(() => setCopied(true)).catch(() => {});
   }, [agent.id]);
 
   return (
