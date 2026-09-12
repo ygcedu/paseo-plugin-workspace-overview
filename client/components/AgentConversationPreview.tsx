@@ -4,7 +4,6 @@ import { useRpc, type PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import type { PaseoClient } from "./workspace-creator-shared";
 import type { AgentEntry } from "../../shared/overview-types";
-import { useTooltip } from "./Tooltip";
 import type { AgentTimelineEntry } from "./agent-conversation-types";
 import { AgentConversationTimeline } from "./AgentConversationTimeline";
 import { ResizeHandle } from "./ResizeHandle";
@@ -13,6 +12,7 @@ import { SharedComposerInput } from "./SharedComposerInput";
 import { agentConfigSetRpc } from "../../shared/agent-config";
 import { buildSelection, type ComposerSelection, type ProviderSnapshot } from "./workspace-creator-shared";
 import { useAutoCommit } from "../agent-preview/useAutoCommit";
+import { AutoCommitErrorToast, QuickActionButton } from "../agent-preview/PreviewActions";
 
 function getColors(theme: PluginSurfaceProps["theme"]) {
   const fallback = {
@@ -28,58 +28,6 @@ function getColors(theme: PluginSurfaceProps["theme"]) {
     return fallback;
   }
   return { ...fallback, ...theme.colors };
-}
-
-function QuickActionButton({
-  icon,
-  color,
-  disabled,
-  tooltip,
-  accessibilityLabel,
-  onPress,
-  style,
-}: {
-  icon: string;
-  color: string;
-  disabled?: boolean;
-  tooltip: Array<{ key: string; value: string }>;
-  accessibilityLabel: string;
-  onPress: () => void;
-  style: ViewStyle;
-}) {
-  const tooltipCtx = useTooltip();
-  const buttonRef = useRef<View | null>(null);
-
-  const showTooltip = useCallback(() => {
-    if (!tooltipCtx || !buttonRef.current) return;
-    buttonRef.current.measureInWindow((x, y, width, height) => {
-      tooltipCtx.show({
-        x: x + width,
-        y: y + height,
-        lines: tooltip,
-      });
-    });
-  }, [tooltip, tooltipCtx]);
-
-  const hideTooltip = useCallback(() => {
-    tooltipCtx?.hide();
-  }, [tooltipCtx]);
-
-  return (
-    <Pressable
-      ref={buttonRef}
-      accessibilityLabel={accessibilityLabel}
-      onPress={onPress}
-      disabled={disabled}
-      style={[style, disabled && { opacity: 0.55 }]}
-      {...({
-        onMouseEnter: showTooltip,
-        onMouseLeave: hideTooltip,
-      } as Record<string, unknown>)}
-    >
-      <Icon name={icon} size={14} color={color} />
-    </Pressable>
-  );
 }
 
 export function AgentConversationPreview({
@@ -364,28 +312,15 @@ export function AgentConversationPreview({
         <View style={{ flex: 1 }}>
           <AgentConversationTimeline entries={entries} theme={theme} />
           {autoCommit.state.kind === "error" ? (
-            <View style={styles.autoCommitToast}>
-              <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
-                <Icon name="TriangleAlert" size={14} color={colors.statusDanger} />
-                <Text style={{ color: colors.statusDanger, fontSize: 12, fontWeight: "600", marginLeft: 7, flex: 1 }}>
-                  一键提交失败
-                </Text>
-                <Pressable onPress={autoCommit.dismiss} style={{ padding: 2 }}>
-                  <Icon name="X" size={13} color={colors.foregroundMuted} />
-                </Pressable>
-              </View>
-              <Text selectable numberOfLines={4} style={{ color: colors.foreground, fontSize: 12, lineHeight: 17, marginTop: 6 }}>
-                {autoCommit.state.message}
-              </Text>
-              <View style={{ flexDirection: "row", justifyContent: "flex-end", marginTop: 8 }}>
-                <Pressable onPress={autoCommit.copyError} style={styles.toastCopyButton}>
-                  <Icon name={autoCommit.copied ? "Check" : "Copy"} size={12} color={colors.foregroundMuted} />
-                  <Text style={{ color: colors.foregroundMuted, fontSize: 11 }}>
-                    {autoCommit.copied ? "已复制" : "复制错误"}
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
+            <AutoCommitErrorToast
+              message={autoCommit.state.message}
+              copied={autoCommit.copied}
+              colors={colors}
+              containerStyle={styles.autoCommitToast}
+              copyButtonStyle={styles.toastCopyButton}
+              onDismiss={autoCommit.dismiss}
+              onCopy={autoCommit.copyError}
+            />
           ) : null}
           <View style={styles.composerDock}>
             <SharedComposerInput
