@@ -1,6 +1,7 @@
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { View } from "react-native";
+import { pointerX, trackHorizontalPointer } from "../web";
 
 export interface ResizableWidthOptions {
   initialWidth: number;
@@ -23,8 +24,7 @@ export interface ResizableWidthResult {
 /**
  * Pointer-based resizable width hook.
  *
- * Mobile-safe fallback. Native plugin surfaces do not expose DOM pointer
- * capture, so the panel keeps its initial width and the handle stays inert.
+ * Uses document-level pointer tracking on web and remains inert on native.
  */
 export function useResizableWidth({
   initialWidth,
@@ -32,19 +32,38 @@ export function useResizableWidth({
   maxWidth,
   direction = "left",
 }: ResizableWidthOptions): ResizableWidthResult {
-  const width = initialWidth;
+  const [width, setWidth] = useState(initialWidth);
+  const [isDragging, setIsDragging] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const panelRef = useRef<View | null>(null);
-  void direction;
-  void minWidth;
-  void maxWidth;
+  const cleanupRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => () => cleanupRef.current?.(), []);
+
+  const onPointerDown = useCallback((event: unknown) => {
+    const startX = pointerX(event);
+    if (startX === null) return;
+    cleanupRef.current?.();
+    const startWidth = width;
+    setIsDragging(true);
+    cleanupRef.current = trackHorizontalPointer(
+      (clientX) => {
+        const delta = direction === "left" ? startX - clientX : clientX - startX;
+        setWidth(Math.max(minWidth, Math.min(maxWidth, startWidth + delta)));
+      },
+      () => {
+        cleanupRef.current = null;
+        setIsDragging(false);
+      },
+    );
+  }, [direction, maxWidth, minWidth, width]);
 
   return {
     width,
-    isDragging: false,
+    isDragging,
     isHovered,
     panelRef,
-    onPointerDown: () => {},
+    onPointerDown,
     onPointerEnter: () => setIsHovered(true),
     onPointerLeave: () => setIsHovered(false),
   };

@@ -79,8 +79,31 @@ export function WorkspaceCreatorPanel({
     let cancelled = false;
     setProviderLoading(true);
     setError(null);
-    void paseo.providers
-      .waitForReady({ cwd: selectedProject.projectDirectory, timeoutMs: PROVIDER_READY_TIMEOUT_MS })
+    const loadProviders = async (): Promise<ProviderSnapshot> => {
+      const initial = await paseo.providers.snapshot({ cwd: selectedProject.projectDirectory }) as ProviderSnapshot;
+      const entries = await Promise.all(initial.entries.map(async (entry) => {
+        if (entry.enabled === false) return entry;
+        const provider = entry.provider as Parameters<typeof paseo.providers.listModels>[0];
+        const [modelsResult, modesResult] = await Promise.allSettled([
+          paseo.providers.listModels(provider, { cwd: selectedProject.projectDirectory }),
+          paseo.providers.listModes(provider, { cwd: selectedProject.projectDirectory }),
+        ]);
+        const models = modelsResult.status === "fulfilled" ? modelsResult.value.models : entry.models;
+        const modes = modesResult.status === "fulfilled" ? modesResult.value.modes : entry.modes;
+        return {
+          ...entry,
+          status: models?.length ? "ready" : entry.status,
+          models,
+          modes,
+          defaultModeId: entry.defaultModeId,
+        };
+      }));
+      return { ...initial, entries };
+    };
+    void Promise.race([
+      loadProviders(),
+      paseo.providers.waitForReady({ cwd: selectedProject.projectDirectory, timeoutMs: PROVIDER_READY_TIMEOUT_MS }) as Promise<ProviderSnapshot>,
+    ])
       .then((nextSnapshot: ProviderSnapshot) => {
         if (cancelled) return;
         setSnapshot(nextSnapshot);

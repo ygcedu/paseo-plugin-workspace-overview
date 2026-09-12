@@ -30,6 +30,8 @@ export function SelectControl({
   const iconColor = theme.colors.foregroundMuted;
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`切换 ${value}`}
       disabled={disabled}
       onPress={onPress}
       style={[styles.control, open && styles.controlOpen, disabled && styles.controlDisabled]}

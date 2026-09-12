@@ -1,4 +1,4 @@
-import { StyleSheet, type TextStyle, type ViewStyle } from "react-native";
+import { Platform, StyleSheet, type TextStyle, type ViewStyle } from "react-native";
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { MAX_MENU_HEIGHT, opaqueSurfaceColor } from "./workspace-creator-shared";
 
@@ -111,6 +111,9 @@ export function createComposerStyles(theme: PluginSurfaceProps["theme"]) {
       fontWeight: "400",
       borderWidth: 0,
       backgroundColor: "transparent",
+      ...(Platform.OS === "web"
+        ? ({ outlineStyle: "none", outlineWidth: 0, outlineColor: "transparent" } as object)
+        : {}),
     } as TextStyle,
     buttonRow: {
       flexDirection: "row",
@@ -144,6 +147,21 @@ export function createComposerStyles(theme: PluginSurfaceProps["theme"]) {
       backgroundColor: colors.accent,
       alignItems: "center",
       justifyContent: "center",
+    } as ViewStyle,
+    attachButton: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      alignItems: "center",
+      justifyContent: "center",
+      flexShrink: 0,
+    } as ViewStyle,
+    idleVoiceButton: {
+      width: 28,
+      height: 28,
+      alignItems: "center",
+      justifyContent: "center",
+      opacity: 0.5,
     } as ViewStyle,
     disabled: {
       opacity: 0.5,

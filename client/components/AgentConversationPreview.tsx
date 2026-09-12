@@ -283,22 +283,6 @@ export function AgentConversationPreview({
       alignItems: "center",
       gap: 6,
     } as ViewStyle,
-    nativeComposerLink: {
-      marginHorizontal: 10,
-      marginBottom: 8,
-      minHeight: 32,
-      paddingHorizontal: 10,
-      borderRadius: 8,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 7,
-      backgroundColor: colors.foregroundMuted + "0d",
-    } as ViewStyle,
-    nativeComposerText: {
-      flex: 1,
-      color: colors.foregroundMuted,
-      fontSize: 11,
-    } as TextStyle,
     quickActionButton: {
       width: 24,
       height: 24,
@@ -343,6 +327,16 @@ export function AgentConversationPreview({
         : autoCommitState.kind === "running" || autoCommitState.kind === "preparing"
           ? colors.accent
           : colors.foregroundMuted;
+  const currentComposerSelection = useMemo(() => ({
+    providerId: agent.provider,
+    providerLabel: agent.provider,
+    modelId: agent.model ?? null,
+    modelLabel: agent.model ?? null,
+    modeId: agent.currentModeId ?? null,
+    modeLabel: agent.currentModeId ?? null,
+    thinkingOptionId: agent.thinkingOptionId ?? null,
+    thinkingLabel: agent.thinkingOptionId ?? null,
+  }), [agent.currentModeId, agent.model, agent.provider, agent.thinkingOptionId]);
 
   return (
     <ResizeHandle
@@ -405,26 +399,12 @@ export function AgentConversationPreview({
               style={styles.quickActionButton}
             />
           </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="在 Paseo 原生会话中调整模型和模式"
-            onPress={onOpenFull}
-            style={styles.nativeComposerLink}
-          >
-            <Icon name="SlidersHorizontal" size={13} color={colors.foregroundMuted} />
-            <Text numberOfLines={1} style={styles.nativeComposerText}>
-              {[agent.provider, agent.model, agent.currentModeId, agent.thinkingOptionId]
-                .filter(Boolean)
-                .join(" · ")}
-            </Text>
-            <Text style={{ color: colors.accent, fontSize: 11 }}>完整 Composer</Text>
-          </Pressable>
           <SharedComposerInput
-            selection={null}
+            selection={currentComposerSelection}
             snapshot={null}
             providerLoading={false}
             openMenu={null}
-            onToggleMenu={() => {}}
+            onToggleMenu={onOpenFull}
             onSelectModel={() => {}}
             onSelectMode={() => {}}
             onSelectThinking={() => {}}
@@ -435,7 +415,7 @@ export function AgentConversationPreview({
             theme={theme}
             autoFocus
             disabled={sending}
-            showAgentControls={false}
+            showAgentControls
             pendingLabel={sending ? "Sending" : null}
             value={prompt}
             onChangeText={setPrompt}

@@ -110,13 +110,19 @@ export function SharedComposerInput({
       detail: entry.label ?? entry.provider,
     })),
   );
-  const modeOptions = modes.map((item) => ({
+  const modeOptions = (modes.length > 0
+    ? modes
+    : selection?.modeId ? [{ id: selection.modeId, label: selection.modeLabel ?? selection.modeId }] : []
+  ).map((item) => ({
     id: item.id,
     label: item.label ?? item.id,
     detail: item.description,
     iconName: item.icon,
   }));
-  const thinkingOptionsForMenu = thinkingOptions.map((item) => ({
+  const thinkingOptionsForMenu = (thinkingOptions.length > 0
+    ? thinkingOptions
+    : selection?.thinkingOptionId ? [{ id: selection.thinkingOptionId, label: selection.thinkingLabel ?? selection.thinkingOptionId }] : []
+  ).map((item) => ({
     id: item.id,
     label: item.label ?? item.id,
     iconName: "Brain",
@@ -142,12 +148,15 @@ export function SharedComposerInput({
       <View style={styles.buttonRow}>
         {showAgentControls ? (
           <View style={styles.leftControls}>
+            <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.attachButton}>
+              <Icon name="Plus" color={colors.foregroundMuted} size={17} />
+            </View>
             <View nativeID="workspace-create-dropdown-model" style={[styles.controlAnchor, openMenu === "model" && styles.controlAnchorOpen]}>
               <SelectControl
                 kind="model"
                 providerId={selection?.providerId}
                 value={formatControlValue(selection?.modelLabel ?? null, "Model")}
-                disabled={disabled || providerLoading || modelOptions.length <= 1}
+                disabled={disabled || providerLoading}
                 open={openMenu === "model"}
                 onPress={() => onToggleMenu(openMenu === "model" ? null : "model")}
                 theme={theme}
@@ -167,7 +176,7 @@ export function SharedComposerInput({
                 <SelectControl
                   kind="thinking"
                   value={formatControlValue(selection?.thinkingLabel ?? null, "Thinking")}
-                  disabled={disabled || providerLoading || thinkingOptionsForMenu.length <= 1}
+                  disabled={disabled || providerLoading}
                   open={openMenu === "thinking"}
                   onPress={() => onToggleMenu(openMenu === "thinking" ? null : "thinking")}
                   theme={theme}
@@ -190,7 +199,7 @@ export function SharedComposerInput({
                   kind="mode"
                   iconName={selectedMode?.icon ?? "Bot"}
                   value={formatControlValue(selection?.modeLabel ?? null, "Mode")}
-                  disabled={disabled || providerLoading || modeOptions.length <= 1}
+                  disabled={disabled || providerLoading}
                   open={openMenu === "mode"}
                   onPress={() => onToggleMenu(openMenu === "mode" ? null : "mode")}
                   theme={theme}
@@ -222,6 +231,10 @@ export function SharedComposerInput({
             >
               <Icon name={isCancelling ? "Loader" : "Square"} color="#fff" size={14} />
             </Pressable>
+          ) : !hasInput ? (
+            <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.idleVoiceButton}>
+              <Icon name="Mic" color={colors.foregroundMuted} size={15} />
+            </View>
           ) : (
             <Pressable
               accessibilityRole="button"
