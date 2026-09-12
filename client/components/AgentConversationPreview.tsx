@@ -1,10 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Text, View, type TextStyle, type ViewStyle } from "react-native";
 import { useRpc, type PluginSurfaceProps } from "@getpaseo/plugin/client";
-import { copyText, Icon } from "@getpaseo/plugin/client/react-native";
+import { Icon } from "@getpaseo/plugin/client/react-native";
 import type { PaseoClient } from "./workspace-creator-shared";
 import type { AgentEntry } from "../../shared/overview-types";
-import { autoCommitStartRpc, autoCommitStatusRpc } from "../../shared/auto-commit";
 import { useTooltip } from "./Tooltip";
 import type { AgentTimelineEntry } from "./agent-conversation-types";
 import { AgentConversationTimeline } from "./AgentConversationTimeline";
@@ -13,6 +12,7 @@ import { createComposerStyles } from "./workspace-creator-styles";
 import { SharedComposerInput } from "./SharedComposerInput";
 import { agentConfigSetRpc } from "../../shared/agent-config";
 import { buildSelection, type ComposerSelection, type ProviderSnapshot } from "./workspace-creator-shared";
+import { useAutoCommit } from "../agent-preview/useAutoCommit";
 
 function getColors(theme: PluginSurfaceProps["theme"]) {
   const fallback = {
@@ -29,13 +29,6 @@ function getColors(theme: PluginSurfaceProps["theme"]) {
   }
   return { ...fallback, ...theme.colors };
 }
-
-type AutoCommitState =
-  | { kind: "idle" }
-  | { kind: "preparing"; message: string }
-  | { kind: "running"; taskId: string; message: string }
-  | { kind: "done"; taskId: string; message: string }
-  | { kind: "error"; message: string; taskId?: string };
 
 function QuickActionButton({
   icon,
@@ -116,12 +109,7 @@ export function AgentConversationPreview({
   const [openMenu, setOpenMenu] = useState<"model" | "mode" | "thinking" | null>(null);
   const [liveStatus, setLiveStatus] = useState(agent.status);
   const loadingRef = useRef(false);
-  const startAutoCommit = useRpc(autoCommitStartRpc);
-  const getAutoCommitStatus = useRpc(autoCommitStatusRpc);
   const setAgentConfig = useRpc(agentConfigSetRpc);
-  const [autoCommitPending, setAutoCommitPending] = useState(false);
-  const [autoCommitState, setAutoCommitState] = useState<AutoCommitState>({ kind: "idle" });
-  const [autoCommitCopied, setAutoCommitCopied] = useState(false);
   const commitCwd = workspaceDirectory ?? agent.cwd;
 
   const refresh = useCallback(async () => {
@@ -145,59 +133,7 @@ export function AgentConversationPreview({
     }
   }, [handle]);
 
-  useEffect(() => {
-    if (autoCommitState.kind !== "error") return;
-    setAutoCommitCopied(false);
-    const timer = setTimeout(() => setAutoCommitState({ kind: "idle" }), 8000);
-    return () => clearTimeout(timer);
-  }, [autoCommitState]);
-
-  const handleAutoCommit = useCallback(async () => {
-    if (autoCommitPending) return;
-    if (!commitCwd) {
-      setAutoCommitState({ kind: "error", message: "当前 agent 没有可用工作目录" });
-      return;
-    }
-
-    setAutoCommitPending(true);
-    setAutoCommitCopied(false);
-    setAutoCommitState({ kind: "preparing", message: "正在启动 Pi 独立进程" });
-
-    try {
-      const { taskId } = await startAutoCommit({ cwd: commitCwd });
-      setAutoCommitState({ kind: "running", taskId, message: "Pi 已启动，正在提交" });
-
-      for (;;) {
-        await new Promise((resolve) => setTimeout(resolve, 1200));
-        const status = await getAutoCommitStatus({ taskId });
-        const message = status.output.trim().split("\n").filter(Boolean).slice(-1)[0] ?? "Pi 正在运行";
-        if (status.status === "running") {
-          setAutoCommitState({ kind: "running", taskId, message });
-          continue;
-        }
-        if (status.status === "done") {
-          setAutoCommitState({ kind: "done", taskId, message: message || "Pi 已完成提交" });
-          void refresh();
-          return;
-        }
-        setAutoCommitState({
-          kind: "error",
-          taskId,
-          message: [status.error, status.output].filter(Boolean).join("\n").trim() || "Pi 提交失败",
-        });
-        return;
-      }
-    } catch (commitError) {
-      setAutoCommitState({ kind: "error", message: commitError instanceof Error ? commitError.message : String(commitError) });
-    } finally {
-      setAutoCommitPending(false);
-    }
-  }, [autoCommitPending, commitCwd, getAutoCommitStatus, refresh, startAutoCommit]);
-
-  const handleCopyAutoCommitError = useCallback(() => {
-    if (autoCommitState.kind !== "error") return;
-    void copyText(autoCommitState.message).then(() => setAutoCommitCopied(true)).catch(() => {});
-  }, [autoCommitState]);
+  const autoCommit = useAutoCommit(commitCwd, refresh);
 
   // Track live agent status via handle subscription + polling
   useEffect(() => {
@@ -384,11 +320,11 @@ export function AgentConversationPreview({
   }), [colors, composerStyles]);
 
   const autoCommitColor =
-    autoCommitState.kind === "error"
+    autoCommit.state.kind === "error"
       ? colors.statusDanger
-      : autoCommitState.kind === "done"
+      : autoCommit.state.kind === "done"
         ? colors.statusSuccess
-        : autoCommitState.kind === "running" || autoCommitState.kind === "preparing"
+        : autoCommit.state.kind === "running" || autoCommit.state.kind === "preparing"
           ? colors.accent
           : colors.foregroundMuted;
 
@@ -408,16 +344,16 @@ export function AgentConversationPreview({
             <Text style={styles.subtitle}>{agent.provider}{agent.model ? ` · ${agent.model}` : ""} · {liveStatus}</Text>
           </View>
           <QuickActionButton
-            icon={autoCommitPending ? "LoaderCircle" : autoCommitState.kind === "done" ? "CheckCircle2" : "GitCommitHorizontal"}
+            icon={autoCommit.pending ? "LoaderCircle" : autoCommit.state.kind === "done" ? "CheckCircle2" : "GitCommitHorizontal"}
             color={autoCommitColor}
-            disabled={autoCommitPending || !commitCwd}
+            disabled={autoCommit.pending || !commitCwd}
             tooltip={[
               { key: "Action", value: "提交代码" },
-              { key: "Status", value: autoCommitState.kind === "idle" ? "Ready" : autoCommitState.message },
+              { key: "Status", value: autoCommit.state.kind === "idle" ? "Ready" : autoCommit.state.message },
               { key: "Directory", value: commitCwd ?? "无工作目录" },
             ]}
             accessibilityLabel="提交当前 Agent 工作目录改动"
-            onPress={() => void handleAutoCommit()}
+            onPress={() => void autoCommit.start()}
             style={styles.quickActionButton}
           />
           <Pressable accessibilityLabel="打开完整会话" onPress={onOpenFull} style={styles.iconButton}><Icon name="ExternalLink" color={colors.foregroundMuted} size={16} /></Pressable>
@@ -427,25 +363,25 @@ export function AgentConversationPreview({
         {error ? <Text style={{ color: colors.statusDanger, padding: 16 }}>{error}</Text> : null}
         <View style={{ flex: 1 }}>
           <AgentConversationTimeline entries={entries} theme={theme} />
-          {autoCommitState.kind === "error" ? (
+          {autoCommit.state.kind === "error" ? (
             <View style={styles.autoCommitToast}>
               <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
                 <Icon name="TriangleAlert" size={14} color={colors.statusDanger} />
                 <Text style={{ color: colors.statusDanger, fontSize: 12, fontWeight: "600", marginLeft: 7, flex: 1 }}>
                   一键提交失败
                 </Text>
-                <Pressable onPress={() => setAutoCommitState({ kind: "idle" })} style={{ padding: 2 }}>
+                <Pressable onPress={autoCommit.dismiss} style={{ padding: 2 }}>
                   <Icon name="X" size={13} color={colors.foregroundMuted} />
                 </Pressable>
               </View>
               <Text selectable numberOfLines={4} style={{ color: colors.foreground, fontSize: 12, lineHeight: 17, marginTop: 6 }}>
-                {autoCommitState.message}
+                {autoCommit.state.message}
               </Text>
               <View style={{ flexDirection: "row", justifyContent: "flex-end", marginTop: 8 }}>
-                <Pressable onPress={handleCopyAutoCommitError} style={styles.toastCopyButton}>
-                  <Icon name={autoCommitCopied ? "Check" : "Copy"} size={12} color={colors.foregroundMuted} />
+                <Pressable onPress={autoCommit.copyError} style={styles.toastCopyButton}>
+                  <Icon name={autoCommit.copied ? "Check" : "Copy"} size={12} color={colors.foregroundMuted} />
                   <Text style={{ color: colors.foregroundMuted, fontSize: 11 }}>
-                    {autoCommitCopied ? "已复制" : "复制错误"}
+                    {autoCommit.copied ? "已复制" : "复制错误"}
                   </Text>
                 </Pressable>
               </View>
