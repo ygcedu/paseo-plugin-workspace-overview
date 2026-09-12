@@ -6,13 +6,7 @@ import { WorkspaceCreateComposer } from "./WorkspaceCreateComposer";
 import { ResizeHandle } from "./ResizeHandle";
 import { buildSelection, submitWorkspacePrompt, defaultSelection, providerById, PROVIDER_READY_TIMEOUT_MS, readPaseoProviderModelPreference, selectableModels, type ComposerSelection, type Isolation, type LaunchTarget, type OpenMenu, type ProviderSnapshot, type TerminalProfile, type WorkspaceCreatorPanelProps } from "./workspace-creator-shared";
 import { terminalLaunchRpc } from "../../shared/terminal-launch";
-
-const DEFAULT_TERMINAL_PROFILES: TerminalProfile[] = [
-  { id: "claude", name: "Claude Code", command: "claude", args: ["{{{prompt}}}"], icon: "claude" },
-  { id: "codex", name: "Codex", command: "codex", args: ["{{{prompt}}}"], icon: "codex" },
-  { id: "opencode", name: "OpenCode", command: "opencode", args: ["--prompt={{{prompt}}}"], icon: "opencode" },
-  { id: "pi", name: "Pi", command: "pi", args: ["{{{prompt}}}"], icon: "pi" },
-];
+import { DEFAULT_TERMINAL_PROFILES } from "../workspace-creator/constants";
 
 export function WorkspaceCreatorPanel({
   projectId,
