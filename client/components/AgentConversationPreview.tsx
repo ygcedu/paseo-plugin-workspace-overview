@@ -13,6 +13,7 @@ import { agentConfigSetRpc } from "../../shared/agent-config";
 import { buildSelection } from "../workspace-creator/provider-selection";
 import { useAutoCommit } from "../agent-preview/useAutoCommit";
 import { AutoCommitErrorToast, QuickActionButton } from "../agent-preview/PreviewActions";
+import type { AgentPermissionRequest, AgentPermissionResponse } from "@getpaseo/protocol/agent-types";
 
 function getColors(theme: PluginSurfaceProps["theme"]) {
   const fallback = {
@@ -39,6 +40,7 @@ export function AgentConversationPreview({
   onOpenFull,
   initialPanelWidth = 480,
   maxPanelWidth = 800,
+  compact = false,
 }: {
   agent: AgentEntry;
   workspaceDirectory?: string;
@@ -48,6 +50,7 @@ export function AgentConversationPreview({
   onOpenFull: () => void;
   initialPanelWidth?: number;
   maxPanelWidth?: number;
+  compact?: boolean;
 }) {
   const handle = useMemo(() => paseo.agents.ref(agent.id), [agent.id, paseo]);
   const [entries, setEntries] = useState<AgentTimelineEntry[]>([]);
@@ -60,6 +63,8 @@ export function AgentConversationPreview({
   const [providerSnapshot, setProviderSnapshot] = useState<ProviderSnapshot | null>(null);
   const [openMenu, setOpenMenu] = useState<"model" | "mode" | "thinking" | null>(null);
   const [liveStatus, setLiveStatus] = useState(agent.status);
+  const [pendingPermissions, setPendingPermissions] = useState<AgentPermissionRequest[]>([]);
+  const [respondingRequestId, setRespondingRequestId] = useState<string | null>(null);
   const loadingRef = useRef(false);
   const setAgentConfig = useRpc(agentConfigSetRpc);
   const commitCwd = workspaceDirectory ?? agent.cwd;
@@ -72,6 +77,10 @@ export function AgentConversationPreview({
       setEntries(page.entries);
       setError(page.error);
       const agentSnapshot = (page as { agent?: { status?: string; currentModeId?: string | null } | null }).agent;
+      const permissions = (page as { agent?: { pendingPermissions?: AgentPermissionRequest[] } | null }).agent?.pendingPermissions
+        ?? handle.pendingPermissions
+        ?? [];
+      setPendingPermissions(permissions);
       if (agentSnapshot?.status) {
         setLiveStatus(agentSnapshot.status as typeof liveStatus);
       } else if (handle.status) {
@@ -84,6 +93,21 @@ export function AgentConversationPreview({
       setLoading(false);
     }
   }, [handle]);
+
+  const respondToPermission = useCallback(async (requestId: string, response: AgentPermissionResponse) => {
+    if (respondingRequestId) return;
+    setRespondingRequestId(requestId);
+    setError(null);
+    try {
+      await handle.respondToPermission({ requestId, response });
+      setPendingPermissions((current) => current.filter((request) => request.id !== requestId));
+      setTimeout(() => void refresh(), 250);
+    } catch (responseError) {
+      setError(responseError instanceof Error ? responseError.message : String(responseError));
+    } finally {
+      setRespondingRequestId(null);
+    }
+  }, [handle, refresh, respondingRequestId]);
 
   const autoCommit = useAutoCommit(commitCwd, refresh);
 
@@ -177,7 +201,7 @@ export function AgentConversationPreview({
 
   const submit = useCallback(async () => {
     const text = prompt.trim();
-    if (!text || sending) return;
+    if (!text || sending || pendingPermissions.length > 0) return;
     setSending(true);
     setError(null);
     try {
@@ -190,7 +214,7 @@ export function AgentConversationPreview({
     } finally {
       setSending(false);
     }
-  }, [handle, prompt, refresh, sending]);
+  }, [handle, pendingPermissions.length, prompt, refresh, sending]);
 
   const colors = getColors(theme);
   const composerStyles = useMemo(() => createComposerStyles(theme), [theme]);
@@ -314,7 +338,14 @@ export function AgentConversationPreview({
         {loading ? <Text style={{ color: colors.foregroundMuted, padding: 16 }}>加载会话中…</Text> : null}
         {error ? <Text style={{ color: colors.statusDanger, padding: 16 }}>{error}</Text> : null}
         <View style={{ flex: 1 }}>
-          <AgentConversationTimeline entries={entries} theme={theme} />
+          <AgentConversationTimeline
+            entries={entries}
+            pendingPermissions={pendingPermissions}
+            respondingRequestId={respondingRequestId}
+            onRespond={(requestId, response) => void respondToPermission(requestId, response)}
+            theme={theme}
+            compact={compact}
+          />
           {autoCommit.state.kind === "error" ? (
             <AutoCommitErrorToast
               message={autoCommit.state.message}
@@ -342,9 +373,9 @@ export function AgentConversationPreview({
             placeholder="继续跟进这个 Agent…"
             theme={theme}
             autoFocus
-            disabled={sending || configPending}
+            disabled={sending || configPending || pendingPermissions.length > 0}
             showAgentControls
-            pendingLabel={sending ? "Sending" : null}
+            pendingLabel={sending ? "Sending" : pendingPermissions.length > 0 ? "请先处理上方请求" : null}
             value={prompt}
             onChangeText={setPrompt}
               onSubmit={submit}

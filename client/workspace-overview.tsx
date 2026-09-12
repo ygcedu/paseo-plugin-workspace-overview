@@ -316,6 +316,7 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
             onOpenFull={() => navigation?.openAgent({ agentId: selectedAgent.id })}
             initialPanelWidth={rightPanelInitialWidth}
             maxPanelWidth={rightPanelMaxWidth}
+            compact={layout.compact}
           />
         ) : null}
         {createDialog ? (
