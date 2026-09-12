@@ -33,8 +33,9 @@ function markdownBlocks(text: string, styles: ReturnType<typeof createStyles>): 
   const nodes: ReactNode[] = [];
   let codeBlock: { lines: string[] } | null = null;
   let codeKey = 0;
+  let previousWasGap = false;
 
-  const lines = text.split("\n");
+  const lines = text.trim().split("\n");
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index];
     const fence = /^\s*(```|~~~)/.test(line);
@@ -54,9 +55,13 @@ function markdownBlocks(text: string, styles: ReturnType<typeof createStyles>): 
     }
 
     if (!line.trim()) {
-      nodes.push(<View key={`gap-${index}`} style={styles.gap} />);
+      if (!previousWasGap && nodes.length > 0) {
+        nodes.push(<View key={`gap-${index}`} style={styles.gap} />);
+      }
+      previousWasGap = true;
       continue;
     }
+    previousWasGap = false;
 
     if (/^\s{0,3}(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
       nodes.push(<View key={`hr-${index}`} style={styles.hr} />);
@@ -206,5 +211,6 @@ function createStyles(theme: PluginSurfaceProps["theme"]) {
 
 export function PaseoAssistantMessage({ text, theme }: { text: string; theme: PluginSurfaceProps["theme"] }) {
   const styles = useMemo(() => createStyles(theme), [theme]);
+  if (!text.trim()) return null;
   return <View style={styles.root}>{markdownBlocks(text, styles)}</View>;
 }

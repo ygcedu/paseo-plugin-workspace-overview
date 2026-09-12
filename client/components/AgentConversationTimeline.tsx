@@ -33,7 +33,7 @@ export function AgentConversationTimeline({ entries, theme }: { entries: AgentTi
     return () => clearTimeout(timer);
   }, [entries.length]);
   return (
-    <ScrollView ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 20 }}>
+    <ScrollView ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 14, paddingBottom: 24 }}>
       <View>
         {timelineBlocks(entries).map((block) => block.kind === "tools"
           ? <PaseoToolCallGroup key={`tools-${block.entries[0]?.seqStart}`} entries={block.entries} theme={theme} />

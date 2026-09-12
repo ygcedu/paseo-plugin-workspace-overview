@@ -327,9 +327,9 @@ export function WorkspaceCreatorPanel({
       theme={theme}
       side="left"
       variant="grip"
-      initialWidth={420}
-      minWidth={320}
-      maxWidth={720}
+      initialWidth={480}
+      minWidth={360}
+      maxWidth={800}
       style={panelStyles.panel}
     >
       {content}

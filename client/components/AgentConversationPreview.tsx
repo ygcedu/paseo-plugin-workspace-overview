@@ -11,6 +11,8 @@ import { AgentConversationTimeline } from "./AgentConversationTimeline";
 import { ResizeHandle } from "./ResizeHandle";
 import { createComposerStyles } from "./workspace-creator-styles";
 import { SharedComposerInput } from "./SharedComposerInput";
+import { agentConfigSetRpc } from "../../shared/agent-config";
+import { buildSelection, type ComposerSelection, type ProviderSnapshot } from "./workspace-creator-shared";
 
 function getColors(theme: PluginSurfaceProps["theme"]) {
   const fallback = {
@@ -108,10 +110,15 @@ export function AgentConversationPreview({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [configPending, setConfigPending] = useState(false);
+  const [composerSelection, setComposerSelection] = useState<ComposerSelection | null>(null);
+  const [providerSnapshot, setProviderSnapshot] = useState<ProviderSnapshot | null>(null);
+  const [openMenu, setOpenMenu] = useState<"model" | "mode" | "thinking" | null>(null);
   const [liveStatus, setLiveStatus] = useState(agent.status);
   const loadingRef = useRef(false);
   const startAutoCommit = useRpc(autoCommitStartRpc);
   const getAutoCommitStatus = useRpc(autoCommitStatusRpc);
+  const setAgentConfig = useRpc(agentConfigSetRpc);
   const [autoCommitPending, setAutoCommitPending] = useState(false);
   const [autoCommitState, setAutoCommitState] = useState<AutoCommitState>({ kind: "idle" });
   const [autoCommitCopied, setAutoCommitCopied] = useState(false);
@@ -217,6 +224,69 @@ export function AgentConversationPreview({
     return () => { unsubscribe(); clearInterval(timer); };
   }, [agent.id, agent.status, handle, refresh]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const provider = agent.provider as Parameters<typeof paseo.providers.listModels>[0];
+    void Promise.all([
+      paseo.providers.listModels(provider, { cwd: workspaceDirectory ?? agent.cwd }),
+      paseo.providers.listModes(provider, { cwd: workspaceDirectory ?? agent.cwd }),
+    ]).then(([modelsResult, modesResult]) => {
+      if (cancelled) return;
+      const models = modelsResult.models ?? [];
+      const modes = modesResult.modes ?? [];
+      const entry = {
+        provider: agent.provider,
+        label: agent.provider,
+        status: "ready" as const,
+        enabled: true,
+        models,
+        modes,
+      };
+      const model = models.find((item) => item.id === agent.model) ?? models[0] ?? null;
+      const next = buildSelection(entry, model);
+      setComposerSelection({
+        ...next,
+        modeId: agent.currentModeId ?? next.modeId,
+        modeLabel: modes.find((item) => item.id === agent.currentModeId)?.label ?? agent.currentModeId ?? next.modeLabel,
+        thinkingOptionId: agent.thinkingOptionId ?? next.thinkingOptionId,
+        thinkingLabel: model?.thinkingOptions?.find((item) => item.id === agent.thinkingOptionId)?.label ?? agent.thinkingOptionId ?? next.thinkingLabel,
+      });
+      setProviderSnapshot({ entries: [entry] });
+    }).catch((loadError: unknown) => {
+      if (!cancelled) setError(loadError instanceof Error ? loadError.message : String(loadError));
+    });
+    return () => { cancelled = true; };
+  }, [agent.currentModeId, agent.cwd, agent.model, agent.provider, agent.thinkingOptionId, paseo, workspaceDirectory]);
+
+  const updateAgentConfig = useCallback(async (field: "model" | "mode" | "thinking", value: string) => {
+    if (configPending) return;
+    setConfigPending(true);
+    setError(null);
+    try {
+      await setAgentConfig({ agentId: agent.id, field, value });
+      setComposerSelection((current) => {
+        if (!current) return current;
+        if (field === "model") {
+          const model = providerSnapshot?.entries[0]?.models?.find((item) => item.id === value);
+          return { ...current, modelId: value, modelLabel: model?.label ?? value, thinkingOptionId: model?.defaultThinkingOptionId ?? null, thinkingLabel: model?.thinkingOptions?.find((item) => item.id === model.defaultThinkingOptionId)?.label ?? model?.defaultThinkingOptionId ?? null };
+        }
+        if (field === "mode") {
+          const mode = providerSnapshot?.entries[0]?.modes?.find((item) => item.id === value);
+          return { ...current, modeId: value, modeLabel: mode?.label ?? value };
+        }
+        const model = providerSnapshot?.entries[0]?.models?.find((item) => item.id === current.modelId);
+        const thinking = model?.thinkingOptions?.find((item) => item.id === value);
+        return { ...current, thinkingOptionId: value, thinkingLabel: thinking?.label ?? value };
+      });
+      setOpenMenu(null);
+      void refresh();
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : String(updateError));
+    } finally {
+      setConfigPending(false);
+    }
+  }, [agent.id, configPending, providerSnapshot, refresh, setAgentConfig]);
+
   const submit = useCallback(async () => {
     const text = prompt.trim();
     if (!text || sending) return;
@@ -269,20 +339,6 @@ export function AgentConversationPreview({
       alignItems: "center",
       justifyContent: "center",
     } as ViewStyle,
-    autoCommitBar: {
-      marginHorizontal: 10,
-      marginBottom: 8,
-      minHeight: 32,
-      paddingHorizontal: 6,
-      paddingVertical: 4,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: colors.foregroundMuted + "22",
-      backgroundColor: colors.foregroundMuted + "0d",
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 6,
-    } as ViewStyle,
     quickActionButton: {
       width: 24,
       height: 24,
@@ -303,8 +359,8 @@ export function AgentConversationPreview({
       gap: 5,
     } as ViewStyle,
     autoCommitToast: {
-      marginHorizontal: 10,
-      marginBottom: 8,
+      marginHorizontal: 12,
+      marginBottom: 10,
       paddingHorizontal: 10,
       paddingVertical: 9,
       borderRadius: 8,
@@ -317,6 +373,14 @@ export function AgentConversationPreview({
       shadowOffset: { width: 0, height: 8 },
       elevation: 20,
     } as ViewStyle,
+    composerDock: {
+      paddingHorizontal: 12,
+      paddingTop: 10,
+      paddingBottom: 12,
+      borderTopWidth: 1,
+      borderTopColor: colors.foregroundMuted + "18",
+      backgroundColor: colors.surface0,
+    } as ViewStyle,
   }), [colors, composerStyles]);
 
   const autoCommitColor =
@@ -327,25 +391,15 @@ export function AgentConversationPreview({
         : autoCommitState.kind === "running" || autoCommitState.kind === "preparing"
           ? colors.accent
           : colors.foregroundMuted;
-  const currentComposerSelection = useMemo(() => ({
-    providerId: agent.provider,
-    providerLabel: agent.provider,
-    modelId: agent.model ?? null,
-    modelLabel: agent.model ?? null,
-    modeId: agent.currentModeId ?? null,
-    modeLabel: agent.currentModeId ?? null,
-    thinkingOptionId: agent.thinkingOptionId ?? null,
-    thinkingLabel: agent.thinkingOptionId ?? null,
-  }), [agent.currentModeId, agent.model, agent.provider, agent.thinkingOptionId]);
 
   return (
     <ResizeHandle
         theme={theme}
         side="left"
         variant="grip"
-        initialWidth={420}
-        minWidth={320}
-        maxWidth={720}
+        initialWidth={480}
+        minWidth={360}
+        maxWidth={800}
         style={styles.panel}
       >
         <View style={styles.header}>
@@ -353,6 +407,19 @@ export function AgentConversationPreview({
             <Text style={styles.title} numberOfLines={1}>{agent.title ?? agent.id.slice(0, 8)}</Text>
             <Text style={styles.subtitle}>{agent.provider}{agent.model ? ` · ${agent.model}` : ""} · {liveStatus}</Text>
           </View>
+          <QuickActionButton
+            icon={autoCommitPending ? "LoaderCircle" : autoCommitState.kind === "done" ? "CheckCircle2" : "GitCommitHorizontal"}
+            color={autoCommitColor}
+            disabled={autoCommitPending || !commitCwd}
+            tooltip={[
+              { key: "Action", value: "提交代码" },
+              { key: "Status", value: autoCommitState.kind === "idle" ? "Ready" : autoCommitState.message },
+              { key: "Directory", value: commitCwd ?? "无工作目录" },
+            ]}
+            accessibilityLabel="提交当前 Agent 工作目录改动"
+            onPress={() => void handleAutoCommit()}
+            style={styles.quickActionButton}
+          />
           <Pressable accessibilityLabel="打开完整会话" onPress={onOpenFull} style={styles.iconButton}><Icon name="ExternalLink" color={colors.foregroundMuted} size={16} /></Pressable>
           <Pressable accessibilityLabel="关闭会话预览" onPress={onClose} style={styles.iconButton}><Icon name="X" color={colors.foregroundMuted} size={16} /></Pressable>
         </View>
@@ -384,43 +451,30 @@ export function AgentConversationPreview({
               </View>
             </View>
           ) : null}
-          <View style={styles.autoCommitBar}>
-            <QuickActionButton
-              icon={autoCommitPending ? "LoaderCircle" : autoCommitState.kind === "done" ? "CheckCircle2" : "GitCommitHorizontal"}
-              color={autoCommitColor}
-              disabled={autoCommitPending || !commitCwd}
-              tooltip={[
-                { key: "Action", value: "提交代码" },
-                { key: "Status", value: autoCommitState.kind === "idle" ? "Ready" : autoCommitState.message },
-                { key: "Directory", value: commitCwd ?? "无工作目录" },
-              ]}
-              accessibilityLabel="提交当前 Agent 工作目录改动"
-              onPress={() => void handleAutoCommit()}
-              style={styles.quickActionButton}
-            />
-          </View>
-          <SharedComposerInput
-            selection={currentComposerSelection}
-            snapshot={null}
+          <View style={styles.composerDock}>
+            <SharedComposerInput
+            selection={composerSelection}
+            snapshot={providerSnapshot}
             providerLoading={false}
-            openMenu={null}
-            onToggleMenu={onOpenFull}
-            onSelectModel={() => {}}
-            onSelectMode={() => {}}
-            onSelectThinking={() => {}}
+            openMenu={openMenu}
+            onToggleMenu={(menu) => setOpenMenu(menu === "model" || menu === "mode" || menu === "thinking" ? menu : null)}
+            onSelectModel={(combinedId) => void updateAgentConfig("model", combinedId.includes("::") ? combinedId.slice(combinedId.indexOf("::") + 2) : combinedId)}
+            onSelectMode={(modeId) => void updateAgentConfig("mode", modeId)}
+            onSelectThinking={(thinkingId) => void updateAgentConfig("thinking", thinkingId)}
             isAgentRunning={false}
             isCancelling={false}
             onCancel={onOpenFull}
             placeholder="继续跟进这个 Agent…"
             theme={theme}
             autoFocus
-            disabled={sending}
+            disabled={sending || configPending}
             showAgentControls
             pendingLabel={sending ? "Sending" : null}
             value={prompt}
             onChangeText={setPrompt}
-            onSubmit={submit}
-          />
+              onSubmit={submit}
+            />
+          </View>
         </View>
     </ResizeHandle>
   );
