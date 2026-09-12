@@ -5,9 +5,10 @@ import { ScrollView, Text, TouchableOpacity, View, type LayoutChangeEvent, type 
 import { TooltipProvider, useTooltip } from "./components/Tooltip";
 import { ProjectCard } from "./components/ProjectCard";
 import { WorkspaceCreatorPanel } from "./components/WorkspaceCreatorPanel";
+import { AgentCreatorPanel } from "./components/AgentCreatorPanel";
 import { useWorkspaces } from "./hooks/useWorkspaces";
 import { useFilter, TIME_RANGES, type TimeRange } from "./hooks/useFilter";
-import { type AgentEntry, type TooltipState } from "../shared/overview-types";
+import { type AgentEntry, type TooltipState, type WorkspaceEntry } from "../shared/overview-types";
 import { AgentConversationPreview } from "./components/AgentConversationPreview";
 import { projectSourceDirectory, useProjectOptions } from "./overview/useProjectOptions";
 
@@ -24,6 +25,7 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
     projectDisplayName: string;
     projectDirectory: string;
   } | null>(null);
+  const [agentCreateWorkspace, setAgentCreateWorkspace] = useState<WorkspaceEntry | null>(null);
   const surfaceRef = useRef<View | null>(null);
   const surfaceOrigin = useRef({ x: 0, y: 0 });
 
@@ -64,6 +66,7 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
   const handleCreateWorktree = useCallback(
     (projectId: string, projectDisplayName: string, projectDirectory: string) => {
       setSelectedAgentId(null);
+      setAgentCreateWorkspace(null);
       setCreateDialog({ projectId, projectDisplayName, projectDirectory });
     },
     [],
@@ -115,6 +118,8 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
     sum + p.workspaces.reduce((s, ws) => s + (filteredAgentsByWorkspace.get(ws.id)?.length ?? 0), 0),
   0);
   const horizontalPadding = layout.compact ? 12 : 20;
+  const rightPanelInitialWidth = Math.max(360, Math.round(surfaceSize.width * 0.5));
+  const rightPanelMaxWidth = Math.max(800, surfaceSize.width - 280);
 
   const TOOLTIP_WIDTH = 280;
   const TOOLTIP_EST_HEIGHT = tooltip ? 24 + tooltip.lines.length * 18 : 0;
@@ -187,52 +192,44 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
       >
         <View style={{ flex: 1, minHeight: 0, position: "relative" }}>
         <View style={{ paddingHorizontal: horizontalPadding, paddingTop: 12, paddingBottom: 8 }}>
-          <View style={{ flexDirection: "row" as const, alignItems: "center" as const, justifyContent: "space-between" as const }}>
+          <View style={{ flexDirection: "row" as const, alignItems: "center" as const }}>
             <Text style={{ color: theme.colors.foreground, fontSize: layout.compact ? 18 : 22, fontWeight: "700" as const }}>
               所有项目
             </Text>
-              <View
-                style={{
-                  flexDirection: "row" as const,
-                  borderRadius: 6,
-                  overflow: "hidden" as const,
-                  borderWidth: 1,
-                  borderColor: theme.colors.foregroundMuted + "22",
-                }}
-              >
-                {TIME_RANGES.map((r) => {
-                  const active = timeRange === r.key;
-                  return (
-                    <TouchableOpacity
-                      key={r.key}
-                      onPress={() => setTimeRange(r.key)}
-                      style={{
-                        paddingHorizontal: 7,
-                        paddingVertical: 3,
-                        backgroundColor: active ? theme.colors.accent + "22" : "transparent",
-                      }}
-                    >
-                      <Text
-                        style={{
-                          color: active ? theme.colors.accent : theme.colors.foregroundMuted,
-                          fontSize: 11,
-                          fontWeight: active ? "600" as const : "400" as const,
-                        }}
-                      >
-                        {r.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
           </View>
           <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12, marginTop: 2 }}>
             {host.label} · {filteredProjects.length} 个项目 · {totalWorkspaces} 个分支 · {totalAgents} 个 agent
           </Text>
+          <View
+            style={{
+              alignSelf: "flex-start" as const,
+              flexDirection: "row" as const,
+              marginTop: 8,
+              borderRadius: 6,
+              overflow: "hidden" as const,
+              borderWidth: 1,
+              borderColor: theme.colors.foregroundMuted + "22",
+            }}
+          >
+            {TIME_RANGES.map((r) => {
+              const active = timeRange === r.key;
+              return (
+                <TouchableOpacity
+                  key={r.key}
+                  onPress={() => setTimeRange(r.key)}
+                  style={{ paddingHorizontal: 7, paddingVertical: 3, backgroundColor: active ? theme.colors.accent + "22" : "transparent" }}
+                >
+                  <Text style={{ color: active ? theme.colors.accent : theme.colors.foregroundMuted, fontSize: 11, fontWeight: active ? "600" as const : "400" as const }}>
+                    {r.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </View>
 
         <View style={{ flex: 1, minHeight: 0, flexDirection: "row" }}>
-        <View style={{ flex: 1, minWidth: 0, display: createDialog && layout.compact ? "none" : "flex" }}>
+        <View style={{ flex: 1, minWidth: 0, display: (createDialog || agentCreateWorkspace) && layout.compact ? "none" : "flex" }}>
         {filteredProjects.length === 0 ? (
           <View style={{ flex: 1, alignItems: "center" as const, justifyContent: "center" as const, padding: 24 }}>
             <Text style={{ color: theme.colors.foregroundMuted, textAlign: "center" as const }}>
@@ -279,7 +276,13 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
                           return;
                         }
                         setCreateDialog(null);
+                        setAgentCreateWorkspace(null);
                         setSelectedAgentId(agent.id);
+                      }}
+                      onCreateAgent={(workspace) => {
+                        setSelectedAgentId(null);
+                        setCreateDialog(null);
+                        setAgentCreateWorkspace(workspace);
                       }}
                       onCreateWorktree={
                         projectDirectory
@@ -311,6 +314,8 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
             theme={theme}
             onClose={() => setSelectedAgentId(null)}
             onOpenFull={() => navigation?.openAgent({ agentId: selectedAgent.id })}
+            initialPanelWidth={rightPanelInitialWidth}
+            maxPanelWidth={rightPanelMaxWidth}
           />
         ) : null}
         {createDialog ? (
@@ -328,6 +333,26 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
             onCreate={() => void refetch()}
             theme={theme}
             layout={layout}
+            initialPanelWidth={rightPanelInitialWidth}
+            maxPanelWidth={rightPanelMaxWidth}
+          />
+        ) : null}
+        {agentCreateWorkspace ? (
+          <AgentCreatorPanel
+            key={agentCreateWorkspace.id}
+            workspace={agentCreateWorkspace}
+            paseo={paseo}
+            theme={theme}
+            compact={layout.compact}
+            initialPanelWidth={rightPanelInitialWidth}
+            maxPanelWidth={rightPanelMaxWidth}
+            onClose={() => setAgentCreateWorkspace(null)}
+            onCreated={(agent) => {
+              setAgentCreateWorkspace(null);
+              void refetch();
+              if (layout.compact && navigation) navigation.openAgent({ agentId: agent.id });
+              else setSelectedAgentId(agent.id);
+            }}
           />
         ) : null}
         </View>

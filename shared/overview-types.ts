@@ -81,5 +81,6 @@ export interface ProjectCardProps {
   hostLabel: string;
   hostId: string;
   onSelectAgent: (agent: AgentEntry) => void;
+  onCreateAgent: (workspace: WorkspaceEntry) => void;
   onCreateWorktree?: () => void;
 }

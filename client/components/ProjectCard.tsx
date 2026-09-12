@@ -33,6 +33,7 @@ export function ProjectCard({
   hostLabel,
   hostId,
   onCreateWorktree,
+  onCreateAgent,
   onSelectAgent,
 }: ProjectCardProps) {
   // Card-level expand: explicit user toggle wins; otherwise auto-expand when
@@ -169,6 +170,7 @@ export function ProjectCard({
                 expanded={isExpanded}
                 onToggle={() => onToggleBranch(ws.id, isExpanded)}
                 onOpenDirectory={() => onOpenDirectory(ws.workspaceDirectory)}
+                onCreateAgent={() => onCreateAgent(ws)}
                 theme={theme}
                 compact={compact}
                 hostLabel={hostLabel}

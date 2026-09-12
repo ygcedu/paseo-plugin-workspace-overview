@@ -11,6 +11,7 @@ export function BranchRow({
   expanded,
   onToggle,
   onOpenDirectory,
+  onCreateAgent,
   theme,
   compact,
   hostLabel,
@@ -20,6 +21,7 @@ export function BranchRow({
   expanded: boolean;
   onToggle: () => void;
   onOpenDirectory?: () => void;
+  onCreateAgent: () => void;
   theme: PluginSurfaceProps["theme"];
   compact: boolean;
   hostLabel: string;
@@ -51,6 +53,13 @@ export function BranchRow({
           fontWeight: "500" as const,
           flex: 1,
         } as TextStyle,
+        createButton: {
+          width: 26,
+          height: 26,
+          marginLeft: 8,
+          alignItems: "center" as const,
+          justifyContent: "center" as const,
+        } as ViewStyle,
       }),
     [theme],
   );
@@ -94,6 +103,18 @@ export function BranchRow({
           }
           onPress={onOpenDirectory}
         />
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel={`在 ${branchLabel} 新建 Agent`}
+          style={styles.createButton}
+          onPress={(event) => {
+            event.stopPropagation();
+            onCreateAgent();
+          }}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+        >
+          <Icon name="Plus" color={theme.colors.foregroundMuted} size={18} />
+        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
