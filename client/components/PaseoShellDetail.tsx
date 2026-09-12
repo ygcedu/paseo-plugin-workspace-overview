@@ -46,13 +46,15 @@ export function PaseoShellDetail({
   const errorText = shellOutputText(error);
   const styles = useMemo(() => ({
     root: {
-      maxHeight: 400,
       minWidth: 0,
       backgroundColor: theme.colors.surface1,
     } as ViewStyle,
     commandBlock: {
       minWidth: 0,
       backgroundColor: theme.colors.surface1,
+    } as ViewStyle,
+    commandScroll: {
+      maxHeight: 400,
     } as ViewStyle,
     horizontalContent: {
       minWidth: "100%",
@@ -99,16 +101,18 @@ export function PaseoShellDetail({
   }), [theme]);
 
   return (
-    <ScrollView style={styles.root} nestedScrollEnabled showsVerticalScrollIndicator>
+    <View style={styles.root}>
       <View style={styles.commandBlock}>
-        <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator contentContainerStyle={styles.horizontalContent}>
-          <View style={styles.codeLine}>
-            <Text selectable style={styles.code}>
-              <Text style={styles.prompt}>$ </Text>
-              {normalizedCommand}
-              {normalizedOutput ? `\n\n${normalizedOutput}` : ""}
-            </Text>
-          </View>
+        <ScrollView style={styles.commandScroll} nestedScrollEnabled showsVerticalScrollIndicator>
+          <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator contentContainerStyle={styles.horizontalContent}>
+            <View style={styles.codeLine}>
+              <Text selectable style={styles.code}>
+                <Text style={styles.prompt}>$ </Text>
+                {normalizedCommand}
+                {normalizedOutput ? `\n\n${normalizedOutput}` : ""}
+              </Text>
+            </View>
+          </ScrollView>
         </ScrollView>
       </View>
       {errorText ? (
@@ -119,6 +123,6 @@ export function PaseoShellDetail({
           </ScrollView>
         </View>
       ) : null}
-    </ScrollView>
+    </View>
   );
 }
