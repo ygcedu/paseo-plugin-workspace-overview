@@ -67,7 +67,7 @@ export function PaseoTimelineItem({ entry, theme, durationMs, completedAt, rewin
   };
   const styles = useMemo(() => ({
     userRoot: { flexDirection: "row", justifyContent: "flex-end", marginVertical: 16 } as ViewStyle,
-    userBubble: { maxWidth: "100%", backgroundColor: theme.colors.surface2, borderRadius: 20, borderTopRightRadius: 4, paddingHorizontal: 16, paddingVertical: 16, minWidth: 0, flexShrink: 1 } as ViewStyle,
+    userBubble: { maxWidth: "92%", alignSelf: "flex-end", backgroundColor: theme.colors.surface2, borderRadius: 20, borderTopRightRadius: 4, paddingHorizontal: 16, paddingVertical: 16, minWidth: 0, flexShrink: 1 } as ViewStyle,
     userText: { color: theme.colors.foreground, fontSize: 15, lineHeight: 21 } as TextStyle,
     error: { flexDirection: "row", gap: 8, paddingVertical: 10, alignItems: "flex-start" } as ViewStyle,
     errorText: { flex: 1, color: theme.colors.statusDanger, fontSize: 14, lineHeight: 20 } as TextStyle,
@@ -77,7 +77,7 @@ export function PaseoTimelineItem({ entry, theme, durationMs, completedAt, rewin
     copyButton: { width: 26, height: 26, borderRadius: 6, alignItems: "center", justifyContent: "center" } as ViewStyle,
     assistantFooter: { flexDirection: "row", alignItems: "center", minHeight: 28, marginTop: 4 } as ViewStyle,
     timing: { color: theme.colors.foregroundMuted, fontSize: 11 } as TextStyle,
-    userActions: { alignItems: "flex-end", justifyContent: "flex-end", paddingRight: 4 } as ViewStyle,
+    userActions: { width: "100%", minWidth: 0, alignItems: "flex-end", justifyContent: "flex-end", paddingRight: 4 } as ViewStyle,
     actionRow: { flexDirection: "row", alignItems: "center", gap: 2 } as ViewStyle,
     rewindMenu: { minWidth: 210, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8, backgroundColor: theme.colors.surface1, paddingVertical: 4, marginTop: 2 } as ViewStyle,
     rewindMenuItem: { minHeight: 34, paddingHorizontal: 10, justifyContent: "center" } as ViewStyle,
