@@ -78,6 +78,7 @@ export function AgentConversationPreview({
   const [commandsError, setCommandsError] = useState<string | null>(null);
   const [lastUsage, setLastUsage] = useState<AgentUsage | null>(null);
   const [activeTurnStartedAt, setActiveTurnStartedAt] = useState<string | null>(null);
+  const [lastAgentError, setLastAgentError] = useState<string | null>(null);
   const loadingRef = useRef(false);
   const historyInitializedRef = useRef(false);
   const latestSeqRef = useRef<number | undefined>(undefined);
@@ -112,6 +113,8 @@ export function AgentConversationPreview({
       setLastUsage(usage ?? null);
       const activeTurn = (page as { agent?: { activeTurn?: { startedAt?: string | null } | null } | null }).agent?.activeTurn ?? handle.activeTurn;
       setActiveTurnStartedAt(activeTurn?.startedAt ?? null);
+      const agentError = (page as { agent?: { lastError?: string | null } | null }).agent?.lastError ?? handle.lastError;
+      setLastAgentError(agentError ?? null);
       const permissions = (page as { agent?: { pendingPermissions?: AgentPermissionRequest[] } | null }).agent?.pendingPermissions
         ?? handle.pendingPermissions
         ?? [];
@@ -187,6 +190,7 @@ export function AgentConversationPreview({
     setEntries([]);
     setCommands([]);
     setCommandsError(null);
+    setLastAgentError(null);
     historyInitializedRef.current = false;
     latestSeqRef.current = undefined;
     setStartCursor(null);
@@ -428,6 +432,7 @@ export function AgentConversationPreview({
         </View>
         {loading ? <Text style={{ color: colors.foregroundMuted, padding: 16 }}>加载会话中…</Text> : null}
         {error ? <Text style={{ color: colors.statusDanger, padding: 16 }}>{error}</Text> : null}
+        {!error && lastAgentError ? <View accessibilityRole="alert" style={{ marginHorizontal: 12, marginTop: 10, padding: 10, borderRadius: 8, borderWidth: 1, borderColor: colors.statusDanger + "66", flexDirection: "row", gap: 8 }}><Icon name="CircleX" size={15} color={colors.statusDanger} /><Text selectable style={{ flex: 1, color: colors.statusDanger, fontSize: 12, lineHeight: 18 }}>{lastAgentError}</Text></View> : null}
         <View style={{ flex: 1 }}>
           <AgentConversationTimeline
             entries={entries}
