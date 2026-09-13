@@ -7,6 +7,9 @@ import { PaseoStreamBadge } from "./PaseoStreamBadge";
 import { PaseoAssistantMessage } from "./PaseoAssistantMessage";
 import { PaseoShellDetail } from "./PaseoShellDetail";
 import { PaseoToolDetail } from "./PaseoToolDetail";
+import type { AgentCapabilityFlags } from "@getpaseo/protocol/agent-types";
+
+type RewindMode = "conversation" | "files" | "both";
 
 function toolPresentation(item: AgentTimelineEntry["item"]): { label: string; secondary?: string; detail?: unknown; icon: string } {
   const detail = item.detail as Record<string, unknown> | undefined;
@@ -51,9 +54,10 @@ function formatDuration(durationMs: number): string {
   return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
 }
 
-export function PaseoTimelineItem({ entry, theme, durationMs, completedAt }: { entry: AgentTimelineEntry; theme: PluginSurfaceProps["theme"]; durationMs?: number; completedAt?: string }) {
+export function PaseoTimelineItem({ entry, theme, durationMs, completedAt, rewindCapabilities, rewinding = false, onRewind }: { entry: AgentTimelineEntry; theme: PluginSurfaceProps["theme"]; durationMs?: number; completedAt?: string; rewindCapabilities?: AgentCapabilityFlags | null; rewinding?: boolean; onRewind?: (messageId: string, text: string, mode: RewindMode) => void }) {
   const item = entry.item;
   const [copied, setCopied] = useState(false);
+  const [rewindMenuOpen, setRewindMenuOpen] = useState(false);
   const copyText = async (text: string) => {
     const clipboard = (navigator as unknown as { clipboard?: { writeText(value: string): Promise<void> } }).clipboard;
     if (!clipboard) return;
@@ -74,6 +78,9 @@ export function PaseoTimelineItem({ entry, theme, durationMs, completedAt }: { e
     assistantFooter: { flexDirection: "row", alignItems: "center", minHeight: 28, marginTop: 4 } as ViewStyle,
     timing: { color: theme.colors.foregroundMuted, fontSize: 11 } as TextStyle,
     userActions: { alignItems: "flex-end", justifyContent: "flex-end", paddingRight: 4 } as ViewStyle,
+    actionRow: { flexDirection: "row", alignItems: "center", gap: 2 } as ViewStyle,
+    rewindMenu: { minWidth: 210, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8, backgroundColor: theme.colors.surface1, paddingVertical: 4, marginTop: 2 } as ViewStyle,
+    rewindMenuItem: { minHeight: 34, paddingHorizontal: 10, justifyContent: "center" } as ViewStyle,
   }), [theme]);
 
   const copyButton = (text: string) => <Pressable
@@ -83,7 +90,14 @@ export function PaseoTimelineItem({ entry, theme, durationMs, completedAt }: { e
     style={styles.copyButton}
   ><Icon name={copied ? "Check" : "Copy"} color={theme.colors.foregroundMuted} size={14} /></Pressable>;
 
-  if (item.type === "user_message") return <View style={styles.userRoot}><View style={styles.userActions}><View style={styles.userBubble}><Text selectable style={styles.userText}>{item.text}</Text></View>{copyButton(String(item.text ?? ""))}</View></View>;
+  if (item.type === "user_message") {
+    const messageId = typeof item.messageId === "string" ? item.messageId : null;
+    const rewindItems: Array<{ mode: RewindMode; label: string }> = [];
+    if (rewindCapabilities?.supportsRewindConversation) rewindItems.push({ mode: "conversation", label: "回退会话" });
+    if (rewindCapabilities?.supportsRewindFiles) rewindItems.push({ mode: "files", label: "回退文件" });
+    if (rewindCapabilities?.supportsRewindBoth) rewindItems.push({ mode: "both", label: "回退会话和文件" });
+    return <View style={styles.userRoot}><View style={styles.userActions}><View style={styles.userBubble}><Text selectable style={styles.userText}>{item.text}</Text></View><View style={styles.actionRow}>{copyButton(String(item.text ?? ""))}{messageId && rewindItems.length ? <Pressable accessibilityRole="button" accessibilityLabel={rewinding ? "正在回退" : "回退到此消息"} disabled={rewinding} onPress={() => setRewindMenuOpen((open) => !open)} style={styles.copyButton}><Icon name={rewinding ? "LoaderCircle" : "Undo2"} color={theme.colors.foregroundMuted} size={14} /></Pressable> : null}</View>{rewindMenuOpen && messageId ? <View accessibilityLabel="回退选项" style={styles.rewindMenu}>{rewindItems.map((option) => <Pressable key={option.mode} accessibilityRole="button" accessibilityLabel={option.label} onPress={() => { setRewindMenuOpen(false); onRewind?.(messageId, String(item.text ?? ""), option.mode); }} style={styles.rewindMenuItem}><Text style={{ color: theme.colors.foreground, fontSize: 13 }}>{option.label}</Text></Pressable>)}</View> : null}</View></View>;
+  }
   if (item.type === "assistant_message") return <View><PaseoAssistantMessage text={item.text} theme={theme} /><View style={styles.assistantFooter}>{copyButton(String(item.text ?? ""))}{durationMs != null ? <Text accessibilityLabel={`完成于 ${completedAt ?? entry.timestamp}`} style={styles.timing}>Worked for {formatDuration(durationMs)}</Text> : null}</View></View>;
   if (item.type === "reasoning") return <PaseoStreamBadge label="Thinking" icon="Brain" detail={item.text} loading={item.status !== "ready"} theme={theme} />;
   if (item.type === "tool_call") {

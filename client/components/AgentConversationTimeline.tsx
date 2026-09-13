@@ -5,7 +5,7 @@ import type { AgentTimelineEntry } from "./agent-conversation-types";
 import { PaseoTimelineItem } from "./PaseoTimelineItem";
 import { PaseoToolCallGroup } from "./PaseoToolCallGroup";
 import { AgentPermissionCard } from "./AgentQuestionCard";
-import type { AgentPermissionRequest, AgentPermissionResponse } from "@getpaseo/protocol/agent-types";
+import type { AgentCapabilityFlags, AgentPermissionRequest, AgentPermissionResponse } from "@getpaseo/protocol/agent-types";
 
 type TimelineBlock =
   | { kind: "entry"; entry: AgentTimelineEntry }
@@ -57,7 +57,7 @@ function RunningTurnIndicator({ startedAt, color }: { startedAt: string | null; 
   </View>;
 }
 
-export function AgentConversationTimeline({ entries, hasOlder, loadingOlder, onLoadOlder, scrollToEndVersion, isRunning, activeTurnStartedAt, pendingPermissions, respondingRequestId, onRespond, theme, compact }: {
+export function AgentConversationTimeline({ entries, hasOlder, loadingOlder, onLoadOlder, scrollToEndVersion, isRunning, activeTurnStartedAt, pendingPermissions, respondingRequestId, onRespond, rewindCapabilities, rewindingMessageId, onRewind, theme, compact }: {
   entries: AgentTimelineEntry[];
   hasOlder: boolean;
   loadingOlder: boolean;
@@ -68,6 +68,9 @@ export function AgentConversationTimeline({ entries, hasOlder, loadingOlder, onL
   pendingPermissions: AgentPermissionRequest[];
   respondingRequestId: string | null;
   onRespond: (requestId: string, response: AgentPermissionResponse) => void;
+  rewindCapabilities?: AgentCapabilityFlags | null;
+  rewindingMessageId: string | null;
+  onRewind: (messageId: string, text: string, mode: "conversation" | "files" | "both") => void;
   theme: PluginSurfaceProps["theme"];
   compact: boolean;
 }) {
@@ -90,7 +93,7 @@ export function AgentConversationTimeline({ entries, hasOlder, loadingOlder, onL
         </Pressable> : null}
         {timelineBlocks(entries).map((block) => block.kind === "tools"
           ? <PaseoToolCallGroup key={`tools-${block.entries[0]?.seqStart}`} entries={block.entries} theme={theme} />
-          : <PaseoTimelineItem key={`${block.entry.seqStart}:${block.entry.item.type}`} entry={block.entry} theme={theme} {...assistantTiming(entries, block.entry)} />)}
+          : <PaseoTimelineItem key={`${block.entry.seqStart}:${block.entry.item.type}`} entry={block.entry} theme={theme} rewindCapabilities={rewindCapabilities} rewinding={rewindingMessageId === block.entry.item.messageId} onRewind={onRewind} {...assistantTiming(entries, block.entry)} />)}
         {pendingPermissions.length > 0 ? <View style={{ gap: 8 }}>
           {pendingPermissions.map((request) => (
             <AgentPermissionCard

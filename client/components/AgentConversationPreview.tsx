@@ -9,7 +9,7 @@ import { AgentConversationTimeline } from "./AgentConversationTimeline";
 import { ResizeHandle } from "./ResizeHandle";
 import { createComposerStyles } from "./workspace-creator-styles";
 import { SharedComposerInput } from "./SharedComposerInput";
-import { agentCancelRpc, agentConfigSetRpc } from "../../shared/agent-config";
+import { agentCancelRpc, agentConfigSetRpc, agentRewindRpc } from "../../shared/agent-config";
 import { buildSelection } from "../workspace-creator/provider-selection";
 import { useAutoCommit } from "../agent-preview/useAutoCommit";
 import { AutoCommitErrorToast, QuickActionButton } from "../agent-preview/PreviewActions";
@@ -79,11 +79,13 @@ export function AgentConversationPreview({
   const [lastUsage, setLastUsage] = useState<AgentUsage | null>(null);
   const [activeTurnStartedAt, setActiveTurnStartedAt] = useState<string | null>(null);
   const [lastAgentError, setLastAgentError] = useState<string | null>(null);
+  const [rewindingMessageId, setRewindingMessageId] = useState<string | null>(null);
   const loadingRef = useRef(false);
   const historyInitializedRef = useRef(false);
   const latestSeqRef = useRef<number | undefined>(undefined);
   const setAgentConfig = useRpc(agentConfigSetRpc);
   const cancelAgent = useRpc(agentCancelRpc);
+  const rewindAgent = useRpc(agentRewindRpc);
   const commitCwd = workspaceDirectory ?? agent.cwd;
 
   const refresh = useCallback(async () => {
@@ -311,6 +313,26 @@ export function AgentConversationPreview({
     }
   }, [agent.id, cancelAgent, cancelling, liveStatus, refresh]);
 
+  const rewind = useCallback(async (messageId: string, text: string, mode: "conversation" | "files" | "both") => {
+    if (rewindingMessageId || liveStatus === "running") return;
+    setRewindingMessageId(messageId);
+    setError(null);
+    try {
+      await rewindAgent({ agentId: agent.id, messageId, mode });
+      setEntries([]);
+      historyInitializedRef.current = false;
+      latestSeqRef.current = undefined;
+      setStartCursor(null);
+      setHasOlder(false);
+      if (mode !== "files") setPrompt(text);
+      await refresh();
+    } catch (rewindError) {
+      setError(rewindError instanceof Error ? rewindError.message : String(rewindError));
+    } finally {
+      setRewindingMessageId(null);
+    }
+  }, [agent.id, liveStatus, refresh, rewindAgent, rewindingMessageId]);
+
   const colors = getColors(theme);
   const composerStyles = useMemo(() => createComposerStyles(theme), [theme]);
   const styles = useMemo(() => ({
@@ -445,6 +467,9 @@ export function AgentConversationPreview({
             pendingPermissions={pendingPermissions}
             respondingRequestId={respondingRequestId}
             onRespond={(requestId, response) => void respondToPermission(requestId, response)}
+            rewindCapabilities={handle.capabilities}
+            rewindingMessageId={rewindingMessageId}
+            onRewind={(messageId, text, mode) => void rewind(messageId, text, mode)}
             theme={theme}
             compact={compact}
           />

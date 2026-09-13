@@ -16,3 +16,9 @@ export const agentCancelRpc = defineRpc({
   input: z.object({ agentId: z.string().min(1) }),
   output: z.object({ ok: z.literal(true) }),
 });
+
+export const agentRewindRpc = defineRpc({
+  name: "overview.agent.rewind",
+  input: z.object({ agentId: z.string().min(1), messageId: z.string().min(1), mode: z.enum(["conversation", "files", "both"]) }),
+  output: z.object({ ok: z.literal(true) }),
+});

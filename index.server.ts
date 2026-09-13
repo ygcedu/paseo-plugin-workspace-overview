@@ -7,8 +7,8 @@ import { terminalLaunchRpc } from "./shared/terminal-launch";
 import { launchWorkspaceTerminal } from "./server/terminal-launch-impl";
 import { autoCommitInfoRpc, autoCommitStartRpc, autoCommitStatusRpc } from "./shared/auto-commit";
 import { readAutoCommitInfo, readAutoCommitTaskStatus, startAutoCommitTask } from "./server/auto-commit-impl";
-import { agentCancelRpc, agentConfigSetRpc } from "./shared/agent-config";
-import { cancelAgent, closeAgentConfigClient, setAgentConfig } from "./server/agent-config-impl";
+import { agentCancelRpc, agentConfigSetRpc, agentRewindRpc } from "./shared/agent-config";
+import { cancelAgent, closeAgentConfigClient, rewindAgent, setAgentConfig } from "./server/agent-config-impl";
 
 export default function contribute(server: PluginServerContext) {
   server.handle(projectIconRpc, async ({ projectId, projectDirectory }) => ({
@@ -26,6 +26,7 @@ export default function contribute(server: PluginServerContext) {
   server.handle(autoCommitStatusRpc, ({ taskId }) => readAutoCommitTaskStatus(taskId));
   server.handle(agentConfigSetRpc, setAgentConfig);
   server.handle(agentCancelRpc, cancelAgent);
+  server.handle(agentRewindRpc, rewindAgent);
 
   return () => closeAgentConfigClient();
 }
