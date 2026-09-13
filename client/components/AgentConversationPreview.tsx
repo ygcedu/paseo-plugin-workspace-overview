@@ -14,6 +14,7 @@ import { buildSelection } from "../workspace-creator/provider-selection";
 import { useAutoCommit } from "../agent-preview/useAutoCommit";
 import { AutoCommitErrorToast, QuickActionButton } from "../agent-preview/PreviewActions";
 import type { AgentPermissionRequest, AgentPermissionResponse } from "@getpaseo/protocol/agent-types";
+import { AgentCommandMenu, type AgentSlashCommand } from "./AgentCommandMenu";
 
 type AgentTimelineCursor = { epoch: string; seq: number };
 
@@ -72,6 +73,9 @@ export function AgentConversationPreview({
   const [hasOlder, setHasOlder] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [scrollToEndVersion, setScrollToEndVersion] = useState(0);
+  const [commands, setCommands] = useState<AgentSlashCommand[]>([]);
+  const [commandsLoading, setCommandsLoading] = useState(false);
+  const [commandsError, setCommandsError] = useState<string | null>(null);
   const loadingRef = useRef(false);
   const historyInitializedRef = useRef(false);
   const latestSeqRef = useRef<number | undefined>(undefined);
@@ -175,6 +179,8 @@ export function AgentConversationPreview({
 
   useEffect(() => {
     setEntries([]);
+    setCommands([]);
+    setCommandsError(null);
     historyInitializedRef.current = false;
     latestSeqRef.current = undefined;
     setStartCursor(null);
@@ -265,6 +271,20 @@ export function AgentConversationPreview({
       setSending(false);
     }
   }, [handle, pendingPermissions.length, prompt, refresh, sending]);
+
+  const slashMatch = prompt.match(/^\/([^\s/]*)$/);
+  const commandQuery = slashMatch?.[1] ?? null;
+  useEffect(() => {
+    if (commandQuery === null || commands.length > 0 || commandsLoading) return;
+    setCommandsLoading(true);
+    setCommandsError(null);
+    void handle.commands().then((result) => {
+      setCommands(result.commands);
+      setCommandsError(result.error);
+    }).catch((commandError: unknown) => {
+      setCommandsError(commandError instanceof Error ? commandError.message : String(commandError));
+    }).finally(() => setCommandsLoading(false));
+  }, [commandQuery, commands.length, commandsLoading, handle]);
 
   const cancel = useCallback(async () => {
     if (cancelling || liveStatus !== "running") return;
@@ -427,6 +447,14 @@ export function AgentConversationPreview({
             />
           ) : null}
           <View style={styles.composerDock}>
+            {commandQuery !== null && pendingPermissions.length === 0 ? <AgentCommandMenu
+              commands={commands}
+              query={commandQuery}
+              loading={commandsLoading}
+              error={commandsError}
+              theme={theme}
+              onSelect={(command) => setPrompt(`/${command.name} `)}
+            /> : null}
             <SharedComposerInput
             selection={composerSelection}
             snapshot={providerSnapshot}
