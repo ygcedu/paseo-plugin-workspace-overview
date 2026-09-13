@@ -28,6 +28,8 @@ function getColors(theme: PluginSurfaceProps["theme"]) {
       foregroundMuted: "#888888",
       accent: "#007acc",
       accentForeground: "#ffffff",
+      statusWarning: "#f59e0b",
+      statusDanger: "#ef4444",
     };
   }
   return theme.colors;
@@ -67,6 +69,7 @@ export interface SharedComposerInputProps {
   value: string;
   onChangeText: (value: string) => void;
   onSubmit: () => void | Promise<void>;
+  usage?: { contextWindowMaxTokens?: number; contextWindowUsedTokens?: number; totalCostUsd?: number } | null;
 }
 
 export function SharedComposerInput({
@@ -91,10 +94,19 @@ export function SharedComposerInput({
   value,
   onChangeText,
   onSubmit,
+  usage = null,
 }: SharedComposerInputProps) {
   const colors = getColors(theme);
   const styles = useMemo(() => createComposerStyles(theme), [theme]);
   const hasInput = value.trim().length > 0;
+  const usagePercentage = usage?.contextWindowMaxTokens && usage.contextWindowUsedTokens != null
+    ? Math.max(0, Math.min(100, Math.round((usage.contextWindowUsedTokens / usage.contextWindowMaxTokens) * 100)))
+    : null;
+  const usageColor = usagePercentage != null && usagePercentage > 90
+    ? colors.statusDanger
+    : usagePercentage != null && usagePercentage >= 70
+      ? colors.statusWarning
+      : colors.foregroundMuted;
 
   // Derived state for selectors (mirrors WorkspaceCreateComposer)
   const currentProvider = providerById(snapshot, selection?.providerId ?? "");
@@ -220,6 +232,14 @@ export function SharedComposerInput({
         )}
 
         <View style={styles.rightControls}>
+          {usagePercentage != null ? <View
+            accessibilityRole="image"
+            accessibilityLabel={`上下文已使用 ${usagePercentage}%${usage?.totalCostUsd ? `，费用 $${usage.totalCostUsd.toFixed(usage.totalCostUsd < 0.01 ? 4 : 2)}` : ""}`}
+            style={{ flexDirection: "row", alignItems: "center", gap: 5 }}
+          >
+            <View style={{ width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: usageColor }} />
+            <Text style={{ color: colors.foregroundMuted, fontSize: 11 }}>{usagePercentage}%</Text>
+          </View> : null}
           {pendingLabel ? <Text style={styles.pendingText}>{pendingLabel}</Text> : null}
           {isAgentRunning && !hasInput ? (
             <Pressable

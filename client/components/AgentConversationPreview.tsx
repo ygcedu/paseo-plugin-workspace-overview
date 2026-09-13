@@ -13,7 +13,7 @@ import { agentCancelRpc, agentConfigSetRpc } from "../../shared/agent-config";
 import { buildSelection } from "../workspace-creator/provider-selection";
 import { useAutoCommit } from "../agent-preview/useAutoCommit";
 import { AutoCommitErrorToast, QuickActionButton } from "../agent-preview/PreviewActions";
-import type { AgentPermissionRequest, AgentPermissionResponse } from "@getpaseo/protocol/agent-types";
+import type { AgentPermissionRequest, AgentPermissionResponse, AgentUsage } from "@getpaseo/protocol/agent-types";
 import { AgentCommandMenu, type AgentSlashCommand } from "./AgentCommandMenu";
 
 type AgentTimelineCursor = { epoch: string; seq: number };
@@ -76,6 +76,7 @@ export function AgentConversationPreview({
   const [commands, setCommands] = useState<AgentSlashCommand[]>([]);
   const [commandsLoading, setCommandsLoading] = useState(false);
   const [commandsError, setCommandsError] = useState<string | null>(null);
+  const [lastUsage, setLastUsage] = useState<AgentUsage | null>(null);
   const loadingRef = useRef(false);
   const historyInitializedRef = useRef(false);
   const latestSeqRef = useRef<number | undefined>(undefined);
@@ -106,6 +107,8 @@ export function AgentConversationPreview({
       }
       setError(page.error);
       const agentSnapshot = (page as { agent?: { status?: string; currentModeId?: string | null } | null }).agent;
+      const usage = (page as { agent?: { lastUsage?: AgentUsage } | null }).agent?.lastUsage ?? handle.lastUsage;
+      setLastUsage(usage ?? null);
       const permissions = (page as { agent?: { pendingPermissions?: AgentPermissionRequest[] } | null }).agent?.pendingPermissions
         ?? handle.pendingPermissions
         ?? [];
@@ -476,6 +479,7 @@ export function AgentConversationPreview({
             value={prompt}
             onChangeText={setPrompt}
               onSubmit={submit}
+              usage={lastUsage}
             />
           </View>
         </View>
