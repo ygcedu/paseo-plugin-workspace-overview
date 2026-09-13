@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
+import { Icon } from "@getpaseo/plugin/client/react-native";
 import type { AgentTimelineEntry } from "./agent-conversation-types";
 import { PaseoTimelineItem } from "./PaseoTimelineItem";
 import { PaseoToolCallGroup } from "./PaseoToolCallGroup";
@@ -75,12 +76,38 @@ export function AgentConversationTimeline({ entries, hasOlder, loadingOlder, onL
   compact: boolean;
 }) {
   const scrollRef = useRef<ScrollView | null>(null);
+  const isAtBottomRef = useRef(true);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [hasNewContent, setHasNewContent] = useState(false);
   useEffect(() => {
+    if (!isAtBottomRef.current) {
+      setHasNewContent(true);
+      return;
+    }
     const timer = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: false }), 0);
     return () => clearTimeout(timer);
   }, [pendingPermissions.length, scrollToEndVersion]);
+  const scrollToBottom = () => {
+    scrollRef.current?.scrollToEnd({ animated: true });
+    isAtBottomRef.current = true;
+    setIsAtBottom(true);
+    setHasNewContent(false);
+  };
   return (
-    <ScrollView ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 14, paddingBottom: 24 }}>
+    <View style={{ flex: 1 }}>
+    <ScrollView
+      ref={scrollRef}
+      style={{ flex: 1 }}
+      scrollEventThrottle={50}
+      onScroll={({ nativeEvent }) => {
+        const bottomDistance = nativeEvent.contentSize.height - nativeEvent.layoutMeasurement.height - nativeEvent.contentOffset.y;
+        const nextAtBottom = bottomDistance <= 48;
+        isAtBottomRef.current = nextAtBottom;
+        setIsAtBottom(nextAtBottom);
+        if (nextAtBottom) setHasNewContent(false);
+      }}
+      contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 14, paddingBottom: 24 }}
+    >
       <View>
         {hasOlder ? <Pressable
           accessibilityRole="button"
@@ -109,5 +136,12 @@ export function AgentConversationTimeline({ entries, hasOlder, loadingOlder, onL
         {isRunning && pendingPermissions.length === 0 ? <RunningTurnIndicator startedAt={activeTurnStartedAt} color={theme.colors.foregroundMuted} /> : null}
       </View>
     </ScrollView>
+    {!isAtBottom ? <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={hasNewContent ? "有新消息，回到底部" : "回到底部"}
+      onPress={scrollToBottom}
+      style={{ position: "absolute", bottom: 12, alignSelf: "center", width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surface1, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 4 }}
+    ><Icon name="ChevronDown" size={20} color={theme.colors.foreground} /></Pressable> : null}
+    </View>
   );
 }
