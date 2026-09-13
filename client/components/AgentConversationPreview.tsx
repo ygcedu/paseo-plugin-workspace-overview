@@ -17,6 +17,31 @@ import type { AgentPermissionRequest, AgentPermissionResponse, AgentUsage } from
 import { AgentCommandMenu, filterAgentCommands, type AgentSlashCommand } from "./AgentCommandMenu";
 
 type AgentTimelineCursor = { epoch: string; seq: number };
+type QueuedMessage = { id: string; text: string };
+
+const queueStorageKey = (agentId: string) => `workspace-overview:agent-queue:${agentId}`;
+
+function loadQueuedMessages(agentId: string): QueuedMessage[] {
+  if (typeof localStorage === "undefined") return [];
+  try {
+    const value = JSON.parse(localStorage.getItem(queueStorageKey(agentId)) ?? "[]");
+    return Array.isArray(value)
+      ? value.filter((item): item is QueuedMessage => typeof item?.id === "string" && typeof item?.text === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveQueuedMessages(agentId: string, messages: QueuedMessage[]) {
+  if (typeof localStorage === "undefined") return;
+  try {
+    if (messages.length === 0) localStorage.removeItem(queueStorageKey(agentId));
+    else localStorage.setItem(queueStorageKey(agentId), JSON.stringify(messages));
+  } catch {
+    // Queueing still works in memory when browser storage is unavailable.
+  }
+}
 
 function getColors(theme: PluginSurfaceProps["theme"]) {
   const fallback = {
@@ -80,7 +105,19 @@ export function AgentConversationPreview({
   const [lastUsage, setLastUsage] = useState<AgentUsage | null>(null);
   const [activeTurnStartedAt, setActiveTurnStartedAt] = useState<string | null>(null);
   const [lastAgentError, setLastAgentError] = useState<string | null>(null);
-  const [queuedMessages, setQueuedMessages] = useState<Array<{ id: string; text: string }>>([]);
+  const [queuedState, setQueuedState] = useState<{ agentId: string; messages: QueuedMessage[] }>(() => ({
+    agentId: agent.id,
+    messages: loadQueuedMessages(agent.id),
+  }));
+  const queuedMessages = queuedState.agentId === agent.id ? queuedState.messages : [];
+  const updateQueuedMessages = useCallback((update: (current: QueuedMessage[]) => QueuedMessage[]) => {
+    setQueuedState((currentState) => {
+      const current = currentState.agentId === agent.id ? currentState.messages : loadQueuedMessages(agent.id);
+      const messages = update(current);
+      saveQueuedMessages(agent.id, messages);
+      return { agentId: agent.id, messages };
+    });
+  }, [agent.id]);
   const [rewindingMessageId, setRewindingMessageId] = useState<string | null>(null);
   const loadingRef = useRef(false);
   const historyInitializedRef = useRef(false);
@@ -89,6 +126,10 @@ export function AgentConversationPreview({
   const cancelAgent = useRpc(agentCancelRpc);
   const rewindAgent = useRpc(agentRewindRpc);
   const commitCwd = workspaceDirectory ?? agent.cwd;
+
+  useEffect(() => {
+    setQueuedState({ agentId: agent.id, messages: loadQueuedMessages(agent.id) });
+  }, [agent.id]);
 
   const refresh = useCallback(async () => {
     if (loadingRef.current) return;
@@ -273,7 +314,7 @@ export function AgentConversationPreview({
     const text = prompt.trim();
     if (!text || sending || pendingPermissions.length > 0) return;
     if (liveStatus === "running") {
-      setQueuedMessages((current) => [...current, { id: `${Date.now()}-${current.length}`, text }]);
+      updateQueuedMessages((current) => [...current, { id: `${Date.now()}-${current.length}`, text }]);
       setPrompt("");
       return;
     }
@@ -289,7 +330,7 @@ export function AgentConversationPreview({
     } finally {
       setSending(false);
     }
-  }, [handle, liveStatus, pendingPermissions.length, prompt, refresh, sending]);
+  }, [handle, liveStatus, pendingPermissions.length, prompt, refresh, sending, updateQueuedMessages]);
 
   useEffect(() => {
     if (liveStatus === "running" || sending || pendingPermissions.length > 0 || queuedMessages.length === 0) return;
@@ -297,13 +338,13 @@ export function AgentConversationPreview({
     setSending(true);
     setError(null);
     void handle.send(next.text).then(() => {
-      setQueuedMessages((current) => current.filter((item) => item.id !== next.id));
+      updateQueuedMessages((current) => current.filter((item) => item.id !== next.id));
       setLiveStatus("running");
       setTimeout(() => void refresh(), 250);
     }).catch((sendError: unknown) => {
       setError(sendError instanceof Error ? sendError.message : String(sendError));
     }).finally(() => setSending(false));
-  }, [handle, liveStatus, pendingPermissions.length, queuedMessages, refresh, sending]);
+  }, [handle, liveStatus, pendingPermissions.length, queuedMessages, refresh, sending, updateQueuedMessages]);
 
   const slashMatch = prompt.match(/^\/([^\s/]*)$/);
   const commandQuery = slashMatch?.[1] ?? null;
@@ -511,8 +552,8 @@ export function AgentConversationPreview({
             {queuedMessages.length ? <View accessibilityLabel="已排队消息" style={{ gap: 6, marginBottom: 8 }}>
               {queuedMessages.map((item, index) => <View key={item.id} style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 9, paddingVertical: 7, borderRadius: 7, backgroundColor: colors.surface0, borderWidth: 1, borderColor: colors.foregroundMuted + "33" }}>
                 <Text numberOfLines={2} style={{ flex: 1, color: colors.foregroundMuted, fontSize: 12 }}>{index + 1}. {item.text}</Text>
-                <Pressable accessibilityRole="button" accessibilityLabel="编辑排队消息" onPress={() => { setPrompt(item.text); setQueuedMessages((current) => current.filter((candidate) => candidate.id !== item.id)); }} style={styles.iconButton}><Icon name="Pencil" size={13} color={colors.foregroundMuted} /></Pressable>
-                <Pressable accessibilityRole="button" accessibilityLabel="删除排队消息" onPress={() => setQueuedMessages((current) => current.filter((candidate) => candidate.id !== item.id))} style={styles.iconButton}><Icon name="X" size={13} color={colors.foregroundMuted} /></Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="编辑排队消息" onPress={() => { setPrompt(item.text); updateQueuedMessages((current) => current.filter((candidate) => candidate.id !== item.id)); }} style={styles.iconButton}><Icon name="Pencil" size={13} color={colors.foregroundMuted} /></Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="删除排队消息" onPress={() => updateQueuedMessages((current) => current.filter((candidate) => candidate.id !== item.id))} style={styles.iconButton}><Icon name="X" size={13} color={colors.foregroundMuted} /></Pressable>
               </View>)}
             </View> : null}
             {commandQuery !== null && pendingPermissions.length === 0 ? <AgentCommandMenu
