@@ -6,6 +6,7 @@ import type { AgentTimelineEntry } from "./agent-conversation-types";
 import { PaseoStreamBadge } from "./PaseoStreamBadge";
 import { PaseoAssistantMessage } from "./PaseoAssistantMessage";
 import { PaseoShellDetail } from "./PaseoShellDetail";
+import { PaseoToolDetail } from "./PaseoToolDetail";
 
 function toolPresentation(item: AgentTimelineEntry["item"]): { label: string; secondary?: string; detail?: unknown; icon: string } {
   const detail = item.detail as Record<string, unknown> | undefined;
@@ -88,15 +89,16 @@ export function PaseoTimelineItem({ entry, theme, durationMs, completedAt }: { e
   if (item.type === "tool_call") {
     const presentation = toolPresentation(item);
     const shellDetail = item.detail?.type === "shell" ? item.detail : null;
+    const semanticDetail = item.detail && item.detail.type !== "shell" ? item.detail : null;
     return (
       <PaseoStreamBadge
         label={presentation.label}
         secondaryLabel={presentation.secondary}
         icon={presentation.icon}
-        detail={shellDetail ? undefined : presentation.detail}
+        detail={undefined}
         loading={item.status === "running" || item.status === "executing"}
         error={item.status === "failed"}
-        fullBleedDetail={Boolean(shellDetail)}
+        fullBleedDetail={Boolean(shellDetail || semanticDetail)}
         theme={theme}
       >
         {shellDetail ? (
@@ -106,7 +108,7 @@ export function PaseoTimelineItem({ entry, theme, durationMs, completedAt }: { e
             error={item.status === "failed" ? item.error : null}
             theme={theme}
           />
-        ) : null}
+        ) : semanticDetail ? <PaseoToolDetail detail={semanticDetail} theme={theme} /> : null}
       </PaseoStreamBadge>
     );
   }
