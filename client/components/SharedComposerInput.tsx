@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Pressable, Text, View, type NativeSyntheticEvent, type TextInputKeyPressEventData } from "react-native";
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { Icon, TextInput } from "@getpaseo/plugin/client/react-native";
@@ -98,6 +98,7 @@ export function SharedComposerInput({
   usage = null,
   onKeyPress,
 }: SharedComposerInputProps) {
+  const [usageOpen, setUsageOpen] = useState(false);
   const colors = getColors(theme);
   const styles = useMemo(() => createComposerStyles(theme), [theme]);
   const hasInput = value.trim().length > 0;
@@ -235,14 +236,20 @@ export function SharedComposerInput({
         )}
 
         <View style={styles.rightControls}>
-          {usagePercentage != null ? <View
-            accessibilityRole="image"
+          {usagePercentage != null ? <View style={{ position: "relative" }}><Pressable
+            accessibilityRole="button"
             accessibilityLabel={`上下文已使用 ${usagePercentage}%${usage?.totalCostUsd ? `，费用 $${usage.totalCostUsd.toFixed(usage.totalCostUsd < 0.01 ? 4 : 2)}` : ""}`}
+            onPress={() => setUsageOpen((open) => !open)}
             style={{ flexDirection: "row", alignItems: "center", gap: 5 }}
           >
             <View style={{ width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: usageColor }} />
             <Text style={{ color: colors.foregroundMuted, fontSize: 11 }}>{usagePercentage}%</Text>
-          </View> : null}
+          </Pressable>{usageOpen ? <View accessibilityLabel="上下文用量详情" style={{ position: "absolute", right: 0, bottom: 24, minWidth: 210, padding: 10, gap: 5, borderRadius: 8, borderWidth: 1, borderColor: colors.foregroundMuted + "44", backgroundColor: colors.surface1, zIndex: 50 }}>
+            <Text style={{ color: colors.foreground, fontSize: 12, fontWeight: "600" }}>Context usage</Text>
+            <Text style={{ color: colors.foregroundMuted, fontSize: 11 }}>Used: {(usage?.contextWindowUsedTokens ?? 0).toLocaleString()} tokens</Text>
+            <Text style={{ color: colors.foregroundMuted, fontSize: 11 }}>Window: {(usage?.contextWindowMaxTokens ?? 0).toLocaleString()} tokens</Text>
+            {usage?.totalCostUsd != null ? <Text style={{ color: colors.foregroundMuted, fontSize: 11 }}>Cost: ${usage.totalCostUsd.toFixed(usage.totalCostUsd < 0.01 ? 4 : 2)}</Text> : null}
+          </View> : null}</View> : null}
           {pendingLabel ? <Text style={styles.pendingText}>{pendingLabel}</Text> : null}
           {isAgentRunning && !hasInput ? (
             <Pressable
