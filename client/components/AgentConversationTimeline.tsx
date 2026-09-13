@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 import type { AgentTimelineEntry } from "./agent-conversation-types";
@@ -44,12 +44,27 @@ function assistantTiming(entries: AgentTimelineEntry[], entry: AgentTimelineEntr
   return {};
 }
 
-export function AgentConversationTimeline({ entries, hasOlder, loadingOlder, onLoadOlder, scrollToEndVersion, pendingPermissions, respondingRequestId, onRespond, theme, compact }: {
+function RunningTurnIndicator({ startedAt, color }: { startedAt: string | null; color: string }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const elapsedSeconds = startedAt ? Math.max(0, Math.floor((now - Date.parse(startedAt)) / 1000)) : null;
+  return <View accessibilityLabel={elapsedSeconds == null ? "Agent 正在工作" : `Agent 已工作 ${elapsedSeconds} 秒`} style={{ flexDirection: "row", alignItems: "center", gap: 8, minHeight: 32, marginTop: 8 }}>
+    <ActivityIndicator size="small" color={color} />
+    {elapsedSeconds != null ? <Text style={{ color, fontSize: 11 }}>Working for {elapsedSeconds}s</Text> : null}
+  </View>;
+}
+
+export function AgentConversationTimeline({ entries, hasOlder, loadingOlder, onLoadOlder, scrollToEndVersion, isRunning, activeTurnStartedAt, pendingPermissions, respondingRequestId, onRespond, theme, compact }: {
   entries: AgentTimelineEntry[];
   hasOlder: boolean;
   loadingOlder: boolean;
   onLoadOlder: () => void;
   scrollToEndVersion: number;
+  isRunning: boolean;
+  activeTurnStartedAt: string | null;
   pendingPermissions: AgentPermissionRequest[];
   respondingRequestId: string | null;
   onRespond: (requestId: string, response: AgentPermissionResponse) => void;
@@ -88,6 +103,7 @@ export function AgentConversationTimeline({ entries, hasOlder, loadingOlder, onL
             />
           ))}
         </View> : null}
+        {isRunning && pendingPermissions.length === 0 ? <RunningTurnIndicator startedAt={activeTurnStartedAt} color={theme.colors.foregroundMuted} /> : null}
       </View>
     </ScrollView>
   );

@@ -77,6 +77,7 @@ export function AgentConversationPreview({
   const [commandsLoading, setCommandsLoading] = useState(false);
   const [commandsError, setCommandsError] = useState<string | null>(null);
   const [lastUsage, setLastUsage] = useState<AgentUsage | null>(null);
+  const [activeTurnStartedAt, setActiveTurnStartedAt] = useState<string | null>(null);
   const loadingRef = useRef(false);
   const historyInitializedRef = useRef(false);
   const latestSeqRef = useRef<number | undefined>(undefined);
@@ -109,6 +110,8 @@ export function AgentConversationPreview({
       const agentSnapshot = (page as { agent?: { status?: string; currentModeId?: string | null } | null }).agent;
       const usage = (page as { agent?: { lastUsage?: AgentUsage } | null }).agent?.lastUsage ?? handle.lastUsage;
       setLastUsage(usage ?? null);
+      const activeTurn = (page as { agent?: { activeTurn?: { startedAt?: string | null } | null } | null }).agent?.activeTurn ?? handle.activeTurn;
+      setActiveTurnStartedAt(activeTurn?.startedAt ?? null);
       const permissions = (page as { agent?: { pendingPermissions?: AgentPermissionRequest[] } | null }).agent?.pendingPermissions
         ?? handle.pendingPermissions
         ?? [];
@@ -432,6 +435,8 @@ export function AgentConversationPreview({
             loadingOlder={loadingOlder}
             onLoadOlder={() => void loadOlder()}
             scrollToEndVersion={scrollToEndVersion}
+            isRunning={liveStatus === "running"}
+            activeTurnStartedAt={activeTurnStartedAt}
             pendingPermissions={pendingPermissions}
             respondingRequestId={respondingRequestId}
             onRespond={(requestId, response) => void respondToPermission(requestId, response)}
