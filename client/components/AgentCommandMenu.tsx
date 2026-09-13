@@ -10,27 +10,32 @@ export interface AgentSlashCommand {
   kind?: "command" | "skill";
 }
 
-export function AgentCommandMenu({ commands, query, loading, error, theme, onSelect }: {
+export function filterAgentCommands(commands: AgentSlashCommand[], query: string) {
+  const normalized = query.trim().toLowerCase();
+  return commands.filter((command) => command.name.toLowerCase().includes(normalized)).slice(0, 12);
+}
+
+export function AgentCommandMenu({ commands, query, loading, error, theme, activeIndex, onSelect }: {
   commands: AgentSlashCommand[];
   query: string;
   loading: boolean;
   error: string | null;
   theme: PluginSurfaceProps["theme"];
+  activeIndex: number;
   onSelect: (command: AgentSlashCommand) => void;
 }) {
-  const normalized = query.trim().toLowerCase();
-  const matches = commands.filter((command) => command.name.toLowerCase().includes(normalized)).slice(0, 12);
+  const matches = filterAgentCommands(commands, query);
   return <View style={{ maxHeight: 260, marginBottom: 8, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8, backgroundColor: theme.colors.surface1, overflow: "hidden" }}>
     {loading ? <View style={{ minHeight: 52, alignItems: "center", justifyContent: "center" }}><ActivityIndicator size="small" color={theme.colors.foregroundMuted} /></View> : null}
     {!loading && error ? <Text style={{ padding: 12, color: theme.colors.statusDanger, fontSize: 12 }}>{error}</Text> : null}
     {!loading && !error && matches.length === 0 ? <Text style={{ padding: 12, color: theme.colors.foregroundMuted, fontSize: 12 }}>没有匹配的命令</Text> : null}
     {!loading && !error ? <ScrollView keyboardShouldPersistTaps="handled">
-      {matches.map((command) => <Pressable
+      {matches.map((command, index) => <Pressable
         key={`${command.kind ?? "command"}:${command.name}`}
         accessibilityRole="button"
         accessibilityLabel={`选择命令 /${command.name}`}
         onPress={() => onSelect(command)}
-        style={({ hovered, pressed }: { hovered?: boolean; pressed?: boolean }) => ({ paddingHorizontal: 12, paddingVertical: 9, flexDirection: "row", gap: 10, backgroundColor: hovered || pressed ? theme.colors.surface2 : theme.colors.surface1 })}
+        style={({ hovered, pressed }: { hovered?: boolean; pressed?: boolean }) => ({ paddingHorizontal: 12, paddingVertical: 9, flexDirection: "row", gap: 10, backgroundColor: index === activeIndex || hovered || pressed ? theme.colors.surface2 : theme.colors.surface1 })}
       >
         <Icon name={command.kind === "skill" ? "Sparkles" : "Terminal"} size={14} color={theme.colors.foregroundMuted} />
         <View style={{ flex: 1, minWidth: 0 }}>

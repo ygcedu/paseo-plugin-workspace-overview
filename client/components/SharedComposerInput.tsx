@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, Text, View, type NativeSyntheticEvent, type TextInputKeyPressEventData } from "react-native";
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { Icon, TextInput } from "@getpaseo/plugin/client/react-native";
 import { ModelBrowserMenu } from "./ModelBrowserMenu";
@@ -70,6 +70,7 @@ export interface SharedComposerInputProps {
   onChangeText: (value: string) => void;
   onSubmit: () => void | Promise<void>;
   usage?: { contextWindowMaxTokens?: number; contextWindowUsedTokens?: number; totalCostUsd?: number } | null;
+  onKeyPress?: (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => void;
 }
 
 export function SharedComposerInput({
@@ -95,6 +96,7 @@ export function SharedComposerInput({
   onChangeText,
   onSubmit,
   usage = null,
+  onKeyPress,
 }: SharedComposerInputProps) {
   const colors = getColors(theme);
   const styles = useMemo(() => createComposerStyles(theme), [theme]);
@@ -157,6 +159,7 @@ export function SharedComposerInput({
         editable={!disabled}
         value={value}
         onChangeText={onChangeText}
+        onKeyPress={onKeyPress}
       />
 
       <View style={styles.buttonRow}>

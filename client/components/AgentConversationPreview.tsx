@@ -14,7 +14,7 @@ import { buildSelection } from "../workspace-creator/provider-selection";
 import { useAutoCommit } from "../agent-preview/useAutoCommit";
 import { AutoCommitErrorToast, QuickActionButton } from "../agent-preview/PreviewActions";
 import type { AgentPermissionRequest, AgentPermissionResponse, AgentUsage } from "@getpaseo/protocol/agent-types";
-import { AgentCommandMenu, type AgentSlashCommand } from "./AgentCommandMenu";
+import { AgentCommandMenu, filterAgentCommands, type AgentSlashCommand } from "./AgentCommandMenu";
 
 type AgentTimelineCursor = { epoch: string; seq: number };
 
@@ -76,6 +76,7 @@ export function AgentConversationPreview({
   const [commands, setCommands] = useState<AgentSlashCommand[]>([]);
   const [commandsLoading, setCommandsLoading] = useState(false);
   const [commandsError, setCommandsError] = useState<string | null>(null);
+  const [activeCommandIndex, setActiveCommandIndex] = useState(0);
   const [lastUsage, setLastUsage] = useState<AgentUsage | null>(null);
   const [activeTurnStartedAt, setActiveTurnStartedAt] = useState<string | null>(null);
   const [lastAgentError, setLastAgentError] = useState<string | null>(null);
@@ -286,6 +287,8 @@ export function AgentConversationPreview({
 
   const slashMatch = prompt.match(/^\/([^\s/]*)$/);
   const commandQuery = slashMatch?.[1] ?? null;
+  const matchingCommands = commandQuery === null ? [] : filterAgentCommands(commands, commandQuery);
+  useEffect(() => setActiveCommandIndex(0), [commandQuery]);
   useEffect(() => {
     if (commandQuery === null || commands.length > 0 || commandsLoading) return;
     setCommandsLoading(true);
@@ -491,6 +494,7 @@ export function AgentConversationPreview({
               loading={commandsLoading}
               error={commandsError}
               theme={theme}
+              activeIndex={activeCommandIndex}
               onSelect={(command) => setPrompt(`/${command.name} `)}
             /> : null}
             <SharedComposerInput
@@ -513,6 +517,20 @@ export function AgentConversationPreview({
             pendingLabel={sending ? "Sending" : pendingPermissions.length > 0 ? "请先处理上方请求" : null}
             value={prompt}
             onChangeText={setPrompt}
+              onKeyPress={(event) => {
+                if (commandQuery === null) return;
+                const key = event.nativeEvent.key;
+                if (key === "ArrowDown" || key === "ArrowUp") {
+                  event.preventDefault();
+                  if (matchingCommands.length) setActiveCommandIndex((current) => (current + (key === "ArrowDown" ? 1 : -1) + matchingCommands.length) % matchingCommands.length);
+                } else if (key === "Enter" && matchingCommands[activeCommandIndex]) {
+                  event.preventDefault();
+                  setPrompt(`/${matchingCommands[activeCommandIndex].name} `);
+                } else if (key === "Escape") {
+                  event.preventDefault();
+                  setPrompt("");
+                }
+              }}
               onSubmit={submit}
               usage={lastUsage}
             />
