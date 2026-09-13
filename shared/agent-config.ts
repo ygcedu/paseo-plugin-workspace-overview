@@ -10,3 +10,9 @@ export const agentConfigSetRpc = defineRpc({
   }),
   output: z.object({ ok: z.literal(true) }),
 });
+
+export const agentCancelRpc = defineRpc({
+  name: "overview.agent.cancel",
+  input: z.object({ agentId: z.string().min(1) }),
+  output: z.object({ ok: z.literal(true) }),
+});

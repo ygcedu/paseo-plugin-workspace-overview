@@ -1,6 +1,6 @@
 import { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { RpcInput } from "@getpaseo/plugin";
-import { agentConfigSetRpc } from "../shared/agent-config";
+import { agentCancelRpc, agentConfigSetRpc } from "../shared/agent-config";
 
 let clientPromise: Promise<DaemonClient> | null = null;
 
@@ -29,6 +29,12 @@ export async function setAgentConfig({ agentId, field, value }: RpcInput<typeof 
   if (field === "model") await client.setAgentModel(agentId, value);
   else if (field === "mode") await client.setAgentMode(agentId, value);
   else await client.setAgentThinkingOption(agentId, value);
+  return { ok: true as const };
+}
+
+export async function cancelAgent({ agentId }: RpcInput<typeof agentCancelRpc>) {
+  const client = await getClient();
+  await client.cancelAgent(agentId);
   return { ok: true as const };
 }
 

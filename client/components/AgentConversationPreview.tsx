@@ -9,7 +9,7 @@ import { AgentConversationTimeline } from "./AgentConversationTimeline";
 import { ResizeHandle } from "./ResizeHandle";
 import { createComposerStyles } from "./workspace-creator-styles";
 import { SharedComposerInput } from "./SharedComposerInput";
-import { agentConfigSetRpc } from "../../shared/agent-config";
+import { agentCancelRpc, agentConfigSetRpc } from "../../shared/agent-config";
 import { buildSelection } from "../workspace-creator/provider-selection";
 import { useAutoCommit } from "../agent-preview/useAutoCommit";
 import { AutoCommitErrorToast, QuickActionButton } from "../agent-preview/PreviewActions";
@@ -61,6 +61,7 @@ export function AgentConversationPreview({
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [configPending, setConfigPending] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [composerSelection, setComposerSelection] = useState<ComposerSelection | null>(null);
   const [providerSnapshot, setProviderSnapshot] = useState<ProviderSnapshot | null>(null);
   const [openMenu, setOpenMenu] = useState<"model" | "mode" | "thinking" | null>(null);
@@ -75,6 +76,7 @@ export function AgentConversationPreview({
   const historyInitializedRef = useRef(false);
   const latestSeqRef = useRef<number | undefined>(undefined);
   const setAgentConfig = useRpc(agentConfigSetRpc);
+  const cancelAgent = useRpc(agentCancelRpc);
   const commitCwd = workspaceDirectory ?? agent.cwd;
 
   const refresh = useCallback(async () => {
@@ -264,6 +266,21 @@ export function AgentConversationPreview({
     }
   }, [handle, pendingPermissions.length, prompt, refresh, sending]);
 
+  const cancel = useCallback(async () => {
+    if (cancelling || liveStatus !== "running") return;
+    setCancelling(true);
+    setError(null);
+    try {
+      await cancelAgent({ agentId: agent.id });
+      setLiveStatus("idle");
+      setTimeout(() => void refresh(), 250);
+    } catch (cancelError) {
+      setError(cancelError instanceof Error ? cancelError.message : String(cancelError));
+    } finally {
+      setCancelling(false);
+    }
+  }, [agent.id, cancelAgent, cancelling, liveStatus, refresh]);
+
   const colors = getColors(theme);
   const composerStyles = useMemo(() => createComposerStyles(theme), [theme]);
   const styles = useMemo(() => ({
@@ -419,9 +436,9 @@ export function AgentConversationPreview({
             onSelectModel={(combinedId) => void updateAgentConfig("model", combinedId.includes("::") ? combinedId.slice(combinedId.indexOf("::") + 2) : combinedId)}
             onSelectMode={(modeId) => void updateAgentConfig("mode", modeId)}
             onSelectThinking={(thinkingId) => void updateAgentConfig("thinking", thinkingId)}
-            isAgentRunning={false}
-            isCancelling={false}
-            onCancel={onOpenFull}
+            isAgentRunning={liveStatus === "running"}
+            isCancelling={cancelling}
+            onCancel={() => void cancel()}
             placeholder="继续跟进这个 Agent…"
             theme={theme}
             autoFocus
