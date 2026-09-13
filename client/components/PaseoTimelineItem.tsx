@@ -1,5 +1,5 @@
-import React, { useMemo } from "react";
-import { Text, View, type TextStyle, type ViewStyle } from "react-native";
+import React, { useMemo, useState } from "react";
+import { Pressable, Text, View, type TextStyle, type ViewStyle } from "react-native";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 import type { AgentTimelineEntry } from "./agent-conversation-types";
@@ -44,6 +44,14 @@ function toolPresentation(item: AgentTimelineEntry["item"]): { label: string; se
 
 export function PaseoTimelineItem({ entry, theme }: { entry: AgentTimelineEntry; theme: PluginSurfaceProps["theme"] }) {
   const item = entry.item;
+  const [copied, setCopied] = useState(false);
+  const copyText = async (text: string) => {
+    const clipboard = (navigator as unknown as { clipboard?: { writeText(value: string): Promise<void> } }).clipboard;
+    if (!clipboard) return;
+    await clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1800);
+  };
   const styles = useMemo(() => ({
     userRoot: { flexDirection: "row", justifyContent: "flex-end", marginVertical: 16 } as ViewStyle,
     userBubble: { maxWidth: "100%", backgroundColor: theme.colors.surface2, borderRadius: 20, borderTopRightRadius: 4, paddingHorizontal: 16, paddingVertical: 16, minWidth: 0, flexShrink: 1 } as ViewStyle,
@@ -53,10 +61,20 @@ export function PaseoTimelineItem({ entry, theme }: { entry: AgentTimelineEntry;
     compact: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 12 } as ViewStyle,
     compactLine: { height: 1, flex: 1, backgroundColor: theme.colors.foregroundMuted + "2a" } as ViewStyle,
     compactText: { color: theme.colors.foregroundMuted, fontSize: 13 } as TextStyle,
+    copyButton: { width: 26, height: 26, borderRadius: 6, alignItems: "center", justifyContent: "center" } as ViewStyle,
+    assistantFooter: { flexDirection: "row", alignItems: "center", minHeight: 28, marginTop: 4 } as ViewStyle,
+    userActions: { alignItems: "flex-end", justifyContent: "flex-end", paddingRight: 4 } as ViewStyle,
   }), [theme]);
 
-  if (item.type === "user_message") return <View style={styles.userRoot}><View style={styles.userBubble}><Text selectable style={styles.userText}>{item.text}</Text></View></View>;
-  if (item.type === "assistant_message") return <PaseoAssistantMessage text={item.text} theme={theme} />;
+  const copyButton = (text: string) => <Pressable
+    accessibilityRole="button"
+    accessibilityLabel={copied ? "已复制" : "复制消息"}
+    onPress={() => void copyText(text)}
+    style={styles.copyButton}
+  ><Icon name={copied ? "Check" : "Copy"} color={theme.colors.foregroundMuted} size={14} /></Pressable>;
+
+  if (item.type === "user_message") return <View style={styles.userRoot}><View style={styles.userActions}><View style={styles.userBubble}><Text selectable style={styles.userText}>{item.text}</Text></View>{copyButton(String(item.text ?? ""))}</View></View>;
+  if (item.type === "assistant_message") return <View><PaseoAssistantMessage text={item.text} theme={theme} /><View style={styles.assistantFooter}>{copyButton(String(item.text ?? ""))}</View></View>;
   if (item.type === "reasoning") return <PaseoStreamBadge label="Thinking" icon="Brain" detail={item.text} loading={item.status !== "ready"} theme={theme} />;
   if (item.type === "tool_call") {
     const presentation = toolPresentation(item);
