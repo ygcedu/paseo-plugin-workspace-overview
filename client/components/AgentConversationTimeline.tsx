@@ -28,6 +28,22 @@ function timelineBlocks(entries: AgentTimelineEntry[]): TimelineBlock[] {
   return blocks;
 }
 
+function assistantTiming(entries: AgentTimelineEntry[], entry: AgentTimelineEntry): { durationMs?: number; completedAt?: string } {
+  if (entry.item.type !== "assistant_message") return {};
+  const index = entries.findIndex((candidate) => candidate.seqStart === entry.seqStart);
+  if (index < 0) return {};
+  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+    const candidate = entries[cursor];
+    if (entry.turnId && candidate.turnId && candidate.turnId !== entry.turnId) continue;
+    if (candidate.item.type !== "user_message") continue;
+    const startedAt = Date.parse(candidate.timestamp);
+    const completedAt = Date.parse(entry.timestamp);
+    if (!Number.isFinite(startedAt) || !Number.isFinite(completedAt)) return {};
+    return { durationMs: Math.max(0, completedAt - startedAt), completedAt: entry.timestamp };
+  }
+  return {};
+}
+
 export function AgentConversationTimeline({ entries, hasOlder, loadingOlder, onLoadOlder, scrollToEndVersion, pendingPermissions, respondingRequestId, onRespond, theme, compact }: {
   entries: AgentTimelineEntry[];
   hasOlder: boolean;
@@ -59,7 +75,7 @@ export function AgentConversationTimeline({ entries, hasOlder, loadingOlder, onL
         </Pressable> : null}
         {timelineBlocks(entries).map((block) => block.kind === "tools"
           ? <PaseoToolCallGroup key={`tools-${block.entries[0]?.seqStart}`} entries={block.entries} theme={theme} />
-          : <PaseoTimelineItem key={`${block.entry.seqStart}:${block.entry.item.type}`} entry={block.entry} theme={theme} />)}
+          : <PaseoTimelineItem key={`${block.entry.seqStart}:${block.entry.item.type}`} entry={block.entry} theme={theme} {...assistantTiming(entries, block.entry)} />)}
         {pendingPermissions.length > 0 ? <View style={{ gap: 8 }}>
           {pendingPermissions.map((request) => (
             <AgentPermissionCard

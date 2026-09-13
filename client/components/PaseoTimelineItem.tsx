@@ -42,7 +42,15 @@ function toolPresentation(item: AgentTimelineEntry["item"]): { label: string; se
   };
 }
 
-export function PaseoTimelineItem({ entry, theme }: { entry: AgentTimelineEntry; theme: PluginSurfaceProps["theme"] }) {
+function formatDuration(durationMs: number): string {
+  const seconds = Math.max(0, durationMs) / 1000;
+  if (seconds < 60) return `${seconds < 10 ? seconds.toFixed(1) : Math.round(seconds)}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = Math.round(seconds % 60);
+  return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
+}
+
+export function PaseoTimelineItem({ entry, theme, durationMs, completedAt }: { entry: AgentTimelineEntry; theme: PluginSurfaceProps["theme"]; durationMs?: number; completedAt?: string }) {
   const item = entry.item;
   const [copied, setCopied] = useState(false);
   const copyText = async (text: string) => {
@@ -63,6 +71,7 @@ export function PaseoTimelineItem({ entry, theme }: { entry: AgentTimelineEntry;
     compactText: { color: theme.colors.foregroundMuted, fontSize: 13 } as TextStyle,
     copyButton: { width: 26, height: 26, borderRadius: 6, alignItems: "center", justifyContent: "center" } as ViewStyle,
     assistantFooter: { flexDirection: "row", alignItems: "center", minHeight: 28, marginTop: 4 } as ViewStyle,
+    timing: { color: theme.colors.foregroundMuted, fontSize: 11 } as TextStyle,
     userActions: { alignItems: "flex-end", justifyContent: "flex-end", paddingRight: 4 } as ViewStyle,
   }), [theme]);
 
@@ -74,7 +83,7 @@ export function PaseoTimelineItem({ entry, theme }: { entry: AgentTimelineEntry;
   ><Icon name={copied ? "Check" : "Copy"} color={theme.colors.foregroundMuted} size={14} /></Pressable>;
 
   if (item.type === "user_message") return <View style={styles.userRoot}><View style={styles.userActions}><View style={styles.userBubble}><Text selectable style={styles.userText}>{item.text}</Text></View>{copyButton(String(item.text ?? ""))}</View></View>;
-  if (item.type === "assistant_message") return <View><PaseoAssistantMessage text={item.text} theme={theme} /><View style={styles.assistantFooter}>{copyButton(String(item.text ?? ""))}</View></View>;
+  if (item.type === "assistant_message") return <View><PaseoAssistantMessage text={item.text} theme={theme} /><View style={styles.assistantFooter}>{copyButton(String(item.text ?? ""))}{durationMs != null ? <Text accessibilityLabel={`完成于 ${completedAt ?? entry.timestamp}`} style={styles.timing}>Worked for {formatDuration(durationMs)}</Text> : null}</View></View>;
   if (item.type === "reasoning") return <PaseoStreamBadge label="Thinking" icon="Brain" detail={item.text} loading={item.status !== "ready"} theme={theme} />;
   if (item.type === "tool_call") {
     const presentation = toolPresentation(item);
