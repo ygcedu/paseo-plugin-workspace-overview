@@ -32,6 +32,8 @@ export function AgentRow({ agent, theme, compact, onSelect }: { agent: AgentEntr
   const activityLabel = formatRelativeTime(activityAt);
   const activityTooltip = activityAt ? new Date(activityAt).toLocaleString() : "";
 
+  const isArchived = !!agent.archivedAt;
+
   const rowBg = statusRowBackground(agent.status, agent.requiresAttention);
   const [copied, setCopied] = useState(false);
   const copyFade = useRef(new Animated.Value(0)).current;
@@ -56,11 +58,13 @@ export function AgentRow({ agent, theme, compact, onSelect }: { agent: AgentEntr
           paddingLeft: 32,
           paddingVertical: 6,
           backgroundColor: rowBg || undefined,
+          opacity: isArchived ? 0.5 : 1,
         } as ViewStyle,
         title: {
           color: theme.colors.foreground,
           fontSize: 12,
           flex: 1,
+          textDecorationLine: isArchived ? "line-through" as const : "none" as const,
         } as TextStyle,
         meta: {
           color: theme.colors.foregroundMuted,
@@ -68,7 +72,7 @@ export function AgentRow({ agent, theme, compact, onSelect }: { agent: AgentEntr
           marginLeft: 8,
         } as TextStyle,
       }),
-    [theme, compact, rowBg],
+    [theme, compact, rowBg, isArchived],
   );
 
   const handleLongPress = useCallback(() => {
@@ -80,6 +84,7 @@ export function AgentRow({ agent, theme, compact, onSelect }: { agent: AgentEntr
       <View style={styles.row}>
         <Text style={styles.title} numberOfLines={1}>
           {agent.title ?? agent.id.slice(0, 8)}
+          {isArchived ? " (archived)" : ""}
         </Text>
         {activityLabel ? (
         <BadgeWithTooltip

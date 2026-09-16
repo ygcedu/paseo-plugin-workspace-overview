@@ -10,7 +10,9 @@ export function WorkspaceAgentsPanel({ theme, layout, workspaceId, navigation }:
   const { data, isLoading, error } = useQuery({
     queryKey: ["workspace-agents", workspaceId],
     queryFn: async () => {
-      const result = await paseo.agents.list({});
+      const result = await paseo.agents.list({
+        filter: { includeArchived: true },
+      });
       return result.entries.filter(
         (entry: { agent: { workspaceId?: string } }) => entry.agent.workspaceId === workspaceId,
       );
@@ -56,7 +58,7 @@ export function WorkspaceAgentsPanel({ theme, layout, workspaceId, navigation }:
         <Text style={styles.empty}>No agents in this workspace.</Text>
       ) : (
         <FlatList
-          data={agents.map((entry: { agent: { id: string; title: string | null; provider: string; model: string | null; status: string; requiresAttention?: boolean } }) => entry.agent)}
+          data={agents.map((entry: { agent: { id: string; title: string | null; provider: string; model: string | null; status: string; requiresAttention?: boolean; archivedAt?: string | null } }) => entry.agent)}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <WorkspaceAgentRow agent={item} theme={theme} compact={layout.compact} navigation={navigation!} />

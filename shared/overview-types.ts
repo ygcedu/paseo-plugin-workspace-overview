@@ -36,6 +36,7 @@ export interface AgentEntry {
   lastUserMessageAt?: string | null;
   requiresAttention?: boolean;
   attentionReason?: "finished" | "error" | "permission" | null;
+  archivedAt?: string | null;
 }
 
 export const KIND_LABEL: Record<WorkspaceEntry["workspaceKind"], string> = {

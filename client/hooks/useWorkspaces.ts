@@ -27,7 +27,7 @@ export function useWorkspaces(hostId: string): UseWorkspacesResult {
 
   const { data: agResult, isLoading: agLoading } = useQuery({
     queryKey: ["ag-list", hostId],
-    queryFn: () => paseo.agents.list({ scope: "active" }),
+    queryFn: () => paseo.agents.list({ filter: { includeArchived: true } }),
     refetchInterval: 5000,
     staleTime: 3000,
   });

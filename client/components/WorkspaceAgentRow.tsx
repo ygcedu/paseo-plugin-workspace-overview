@@ -15,11 +15,14 @@ export function WorkspaceAgentRow({
     model: string | null;
     status: string;
     requiresAttention?: boolean;
+    archivedAt?: string | null;
   };
   theme: PluginWorkspacePanelProps["theme"];
   compact: boolean;
   navigation: NonNullable<PluginWorkspacePanelProps["navigation"]>;
 }) {
+  const isArchived = !!agent.archivedAt;
+
   const styles = useMemo(
     () =>
       ({
@@ -30,6 +33,7 @@ export function WorkspaceAgentRow({
           borderRadius: 6,
           marginBottom: 4,
           backgroundColor: agent.requiresAttention ? theme.colors.statusDanger + "20" : theme.colors.surface0,
+          opacity: isArchived ? 0.5 : 1,
         } as ViewStyle,
         dot: {
           width: 8,
@@ -44,13 +48,29 @@ export function WorkspaceAgentRow({
           marginTop: 5,
           marginRight: 8,
           flexShrink: 0,
+          opacity: isArchived ? 0.5 : 1,
         } as ViewStyle,
         info: { flex: 1 } as ViewStyle,
-        title: { color: theme.colors.foreground, fontSize: compact ? 13 : 14, fontWeight: "500" as const } as TextStyle,
-        meta: { color: theme.colors.foregroundMuted, fontSize: 11, marginTop: 2 } as TextStyle,
-        provider: { color: theme.colors.foregroundMuted, fontSize: 10, marginTop: 1 } as TextStyle,
+        title: {
+          color: theme.colors.foreground,
+          fontSize: compact ? 13 : 14,
+          fontWeight: "500" as const,
+          textDecorationLine: isArchived ? "line-through" as const : "none" as const,
+        } as TextStyle,
+        meta: {
+          color: theme.colors.foregroundMuted,
+          fontSize: 11,
+          marginTop: 2,
+          textDecorationLine: isArchived ? "line-through" as const : "none" as const,
+        } as TextStyle,
+        provider: {
+          color: theme.colors.foregroundMuted,
+          fontSize: 10,
+          marginTop: 1,
+          textDecorationLine: isArchived ? "line-through" as const : "none" as const,
+        } as TextStyle,
       }),
-    [theme, compact, agent.requiresAttention, agent.status],
+    [theme, compact, agent.requiresAttention, agent.status, isArchived],
   );
 
   return (
@@ -61,7 +81,7 @@ export function WorkspaceAgentRow({
           <Text style={styles.title} numberOfLines={1}>
             {agent.title ?? agent.id.slice(0, 8)}
           </Text>
-          <Text style={styles.meta}>{agent.status}</Text>
+          <Text style={styles.meta}>{agent.status}{isArchived ? " (archived)" : ""}</Text>
           <Text style={styles.provider}>
             {agent.provider}
             {agent.model ? ` · ${agent.model}` : ""}
