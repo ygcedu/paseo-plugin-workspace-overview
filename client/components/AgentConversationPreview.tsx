@@ -586,8 +586,14 @@ export function AgentConversationPreview({
             value={prompt}
             onChangeText={setPrompt}
               onKeyPress={(event) => {
-                if (commandQuery === null) return;
                 const key = event.nativeEvent.key;
+                if (commandQuery === null) {
+                  if (key === "Enter") {
+                    event.preventDefault();
+                    void submit();
+                  }
+                  return;
+                }
                 if (key === "ArrowDown" || key === "ArrowUp") {
                   event.preventDefault();
                   if (matchingCommands.length) setActiveCommandIndex((current) => (current + (key === "ArrowDown" ? 1 : -1) + matchingCommands.length) % matchingCommands.length);
