@@ -19,6 +19,7 @@ export function useFilter(
   }>,
   agentsByWorkspace: Map<string, AgentEntry[]>,
   timeRange: TimeRange,
+  showArchived: boolean,
 ) {
   const rangeMs = useMemo(
     () => TIME_RANGES.find((r) => r.key === timeRange)!.ms,
@@ -36,7 +37,6 @@ export function useFilter(
   );
 
   const filteredProjects = useMemo(() => {
-    if (timeRange === "all") return projects;
     const result: Array<{
       projectId: string;
       projectDisplayName: string;
@@ -49,9 +49,17 @@ export function useFilter(
           // in the selected window.  Do NOT fall back to ws.activityAt or
           // ws.statusEnteredAt — those are workspace creation/status-change
           // metadata, not actual user activity.
-          const wsAgents = (agentsByWorkspace.get(ws.id) ?? []).filter(
-            (a) => isRecent(a.lastUserMessageAt),
-          );
+          let wsAgents = (agentsByWorkspace.get(ws.id) ?? []);
+
+          // Filter out archived agents unless showArchived is true
+          if (!showArchived) {
+            wsAgents = wsAgents.filter((a) => !a.archivedAt);
+          }
+
+          if (timeRange !== "all") {
+            wsAgents = wsAgents.filter((a) => isRecent(a.lastUserMessageAt));
+          }
+
           return wsAgents.length > 0 ? ws : null;
         })
         .filter((ws): ws is WorkspaceEntry => ws !== null);
@@ -60,21 +68,28 @@ export function useFilter(
       }
     }
     return result;
-  }, [projects, agentsByWorkspace, timeRange, isRecent]);
+  }, [projects, agentsByWorkspace, timeRange, isRecent, showArchived]);
 
   const filteredAgentsByWorkspace = useMemo(() => {
-    if (timeRange === "all") return agentsByWorkspace;
     const map = new Map<string, AgentEntry[]>();
     for (const project of filteredProjects) {
       for (const ws of project.workspaces) {
-        const agents = (agentsByWorkspace.get(ws.id) ?? []).filter((a) =>
-          isRecent(a.lastUserMessageAt),
-        );
+        let agents = (agentsByWorkspace.get(ws.id) ?? []);
+
+        // Filter out archived agents unless showArchived is true
+        if (!showArchived) {
+          agents = agents.filter((a) => !a.archivedAt);
+        }
+
+        if (timeRange !== "all") {
+          agents = agents.filter((a) => isRecent(a.lastUserMessageAt));
+        }
+
         if (agents.length > 0) map.set(ws.id, agents);
       }
     }
     return map;
-  }, [timeRange, filteredProjects, agentsByWorkspace, isRecent]);
+  }, [timeRange, filteredProjects, agentsByWorkspace, isRecent, showArchived]);
 
   const autoExpand = useMemo(() => {
     if (timeRange === "all") return {};

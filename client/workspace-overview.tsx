@@ -1,4 +1,4 @@
-import { type PluginSurfaceProps, usePaseo } from "@getpaseo/plugin/client";
+import { type PluginSurfaceProps, usePaseo, useRpc } from "@getpaseo/plugin/client";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { ScrollView, Text, TouchableOpacity, View, type LayoutChangeEvent, type ViewStyle, type TextStyle } from "react-native";
 
@@ -11,6 +11,9 @@ import { useFilter, TIME_RANGES, type TimeRange } from "./hooks/useFilter";
 import { type AgentEntry, type TooltipState, type WorkspaceEntry } from "../shared/overview-types";
 import { AgentConversationPreview } from "./components/AgentConversationPreview";
 import { projectSourceDirectory, useProjectOptions } from "./overview/useProjectOptions";
+import { pluginReloadRpc } from "../shared/agent-config";
+
+const PLUGIN_ID = "workspace-overview";
 
 export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSurfaceProps) {
   const [containerWidth, setContainerWidth] = useState(0);
@@ -19,6 +22,7 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const [surfaceSize, setSurfaceSize] = useState({ width: 0, height: 0 });
   const [timeRange, setTimeRange] = useState<TimeRange>("24h");
+  const [showArchived, setShowArchived] = useState(false);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [createDialog, setCreateDialog] = useState<{
     projectId: string;
@@ -32,10 +36,21 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
   const paseo = usePaseo();
   const { projects, agentsByWorkspace, isLoading, error, refetch } = useWorkspaces(host.id);
 
+  const reloadPlugin = useRpc(pluginReloadRpc);
+
+  const handlePluginReload = useCallback(async () => {
+    try {
+      await reloadPlugin({ pluginId: PLUGIN_ID });
+    } catch (e) {
+      console.warn("Failed to reload plugin:", e);
+    }
+  }, [reloadPlugin]);
+
   const { filteredProjects, filteredAgentsByWorkspace, autoExpand } = useFilter(
     projects,
     agentsByWorkspace,
     timeRange,
+    showArchived,
   );
   const selectedAgent = useMemo(
     () => {
@@ -194,39 +209,81 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
         <View style={{ flex: 1, minHeight: 0, flexDirection: "row" }}>
         <View style={{ flex: 1, minWidth: 0, display: (createDialog || agentCreateWorkspace) && layout.compact ? "none" : "flex" }}>
         <View style={{ paddingHorizontal: horizontalPadding, paddingTop: 12, paddingBottom: 8 }}>
-          <View style={{ flexDirection: "row" as const, alignItems: "center" as const }}>
-            <Text style={{ color: theme.colors.foreground, fontSize: layout.compact ? 18 : 22, fontWeight: "700" as const }}>
-              所有项目
-            </Text>
+          <View style={{ flexDirection: "row" as const, alignItems: "center" as const, justifyContent: "space-between" }}>
+            <View style={{ flexDirection: "row" as const, alignItems: "center" as const }}>
+              <Text style={{ color: theme.colors.foreground, fontSize: layout.compact ? 18 : 22, fontWeight: "700" as const }}>
+                所有项目
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={handlePluginReload}
+              activeOpacity={0.7}
+              style={{
+                padding: 10,
+                borderRadius: 8,
+                backgroundColor: theme.colors.foregroundMuted + "14",
+              }}
+              accessibilityLabel="重新加载插件"
+            >
+              <Text style={{ color: theme.colors.foreground, fontSize: 24, fontWeight: "600" }}>⟳</Text>
+            </TouchableOpacity>
           </View>
           <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12, marginTop: 2 }}>
             {host.label} · {filteredProjects.length} 个项目 · {totalWorkspaces} 个分支 · {totalAgents} 个 agent
           </Text>
-          <View
-            style={{
-              alignSelf: "flex-start" as const,
-              flexDirection: "row" as const,
-              marginTop: 8,
-              borderRadius: 6,
-              overflow: "hidden" as const,
-              borderWidth: 1,
-              borderColor: theme.colors.foregroundMuted + "22",
-            }}
-          >
-            {TIME_RANGES.map((r) => {
-              const active = timeRange === r.key;
-              return (
-                <TouchableOpacity
-                  key={r.key}
-                  onPress={() => setTimeRange(r.key)}
-                  style={{ paddingHorizontal: 7, paddingVertical: 3, backgroundColor: active ? theme.colors.accent + "22" : "transparent" }}
+          <View style={{ flexDirection: "row" as const, alignItems: "center" as const, marginTop: 8, gap: 8 }}>
+            <View
+              style={{
+                flexDirection: "row" as const,
+                borderRadius: 6,
+                overflow: "hidden" as const,
+                borderWidth: 1,
+                borderColor: theme.colors.foregroundMuted + "22",
+              }}
+            >
+              {TIME_RANGES.map((r) => {
+                const active = timeRange === r.key;
+                return (
+                  <TouchableOpacity
+                    key={r.key}
+                    onPress={() => setTimeRange(r.key)}
+                    style={{ paddingHorizontal: 7, paddingVertical: 3, backgroundColor: active ? theme.colors.accent + "22" : "transparent" }}
+                  >
+                    <Text style={{ color: active ? theme.colors.accent : theme.colors.foregroundMuted, fontSize: 11, fontWeight: active ? "600" as const : "400" as const }}>
+                      {r.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <View
+              style={{
+                flexDirection: "row" as const,
+                borderRadius: 6,
+                overflow: "hidden" as const,
+                borderWidth: 1,
+                borderColor: theme.colors.foregroundMuted + "22",
+              }}
+            >
+              <TouchableOpacity
+                onPress={() => setShowArchived(!showArchived)}
+                style={{
+                  paddingHorizontal: 10,
+                  paddingVertical: 3,
+                  backgroundColor: showArchived ? theme.colors.accent + "22" : "transparent",
+                }}
+              >
+                <Text
+                  style={{
+                    color: showArchived ? theme.colors.accent : theme.colors.foregroundMuted,
+                    fontSize: 11,
+                    fontWeight: showArchived ? "600" as const : "400" as const,
+                  }}
                 >
-                  <Text style={{ color: active ? theme.colors.accent : theme.colors.foregroundMuted, fontSize: 11, fontWeight: active ? "600" as const : "400" as const }}>
-                    {r.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+                  {showArchived ? "隐藏归档" : "显示归档"}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
