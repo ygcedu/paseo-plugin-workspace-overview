@@ -210,23 +210,19 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
         <View style={{ flex: 1, minWidth: 0, display: (createDialog || agentCreateWorkspace) && layout.compact ? "none" : "flex" }}>
         <View style={{ paddingHorizontal: horizontalPadding, paddingTop: 12, paddingBottom: 8 }}>
           <View style={{ flexDirection: "row" as const, alignItems: "center" as const, justifyContent: "space-between" }}>
-            <View style={{ flexDirection: "row" as const, alignItems: "center" as const }}>
+            <View style={{ flexDirection: "row" as const, alignItems: "center" as const, gap: 12 }}>
               <Text style={{ color: theme.colors.foreground, fontSize: layout.compact ? 18 : 22, fontWeight: "700" as const }}>
                 所有项目
               </Text>
+              <TouchableOpacity
+                onPress={handlePluginReload}
+                activeOpacity={0.7}
+                style={{ padding: 4 }}
+                accessibilityLabel="重新加载插件"
+              >
+                <Text style={{ color: theme.colors.foregroundMuted, fontSize: 22, fontWeight: "600" }}>⟳</Text>
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              onPress={handlePluginReload}
-              activeOpacity={0.7}
-              style={{
-                padding: 10,
-                borderRadius: 8,
-                backgroundColor: theme.colors.foregroundMuted + "14",
-              }}
-              accessibilityLabel="重新加载插件"
-            >
-              <Text style={{ color: theme.colors.foreground, fontSize: 24, fontWeight: "600" }}>⟳</Text>
-            </TouchableOpacity>
           </View>
           <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12, marginTop: 2 }}>
             {host.label} · {filteredProjects.length} 个项目 · {totalWorkspaces} 个分支 · {totalAgents} 个 agent

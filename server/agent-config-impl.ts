@@ -1,6 +1,6 @@
 import { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { RpcInput } from "@getpaseo/plugin";
-import { agentCancelRpc, agentConfigSetRpc, agentRewindRpc } from "../shared/agent-config";
+import { agentCancelRpc, agentConfigSetRpc, agentRewindRpc, pluginReloadRpc } from "../shared/agent-config";
 
 let clientPromise: Promise<DaemonClient> | null = null;
 
@@ -41,6 +41,12 @@ export async function cancelAgent({ agentId }: RpcInput<typeof agentCancelRpc>) 
 export async function rewindAgent({ agentId, messageId, mode }: RpcInput<typeof agentRewindRpc>) {
   const client = await getClient();
   await client.rewindAgent(agentId, messageId, mode);
+  return { ok: true as const };
+}
+
+export async function reloadPlugin({ pluginId }: RpcInput<typeof pluginReloadRpc>) {
+  const client = await getClient();
+  await client.reloadPlugin(pluginId);
   return { ok: true as const };
 }
 
