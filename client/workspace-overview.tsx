@@ -8,12 +8,19 @@ import { WorkspaceCreatorPanel } from "./components/WorkspaceCreatorPanel";
 import { AgentCreatorPanel } from "./components/AgentCreatorPanel";
 import { useWorkspaces } from "./hooks/useWorkspaces";
 import { useFilter, TIME_RANGES, type TimeRange } from "./hooks/useFilter";
+import { useAgentActivityHeatmap } from "./hooks/useAgentActivityHeatmap";
+import { HeatmapCalendar } from "./components/HeatmapCalendar";
 import { type AgentEntry, type TooltipState, type WorkspaceEntry } from "../shared/overview-types";
 import { AgentConversationPreview } from "./components/AgentConversationPreview";
 import { projectSourceDirectory, useProjectOptions } from "./overview/useProjectOptions";
 import { pluginReloadRpc } from "../shared/agent-config";
 
 const PLUGIN_ID = "workspace-overview";
+
+function formatActivityDate(date: string) {
+  const [, month, day] = date.split("-");
+  return `${Number(month)}月${Number(day)}日`;
+}
 
 export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSurfaceProps) {
   const [containerWidth, setContainerWidth] = useState(0);
@@ -22,6 +29,8 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const [surfaceSize, setSurfaceSize] = useState({ width: 0, height: 0 });
   const [timeRange, setTimeRange] = useState<TimeRange>("24h");
+  const [activeTimeFilter, setActiveTimeFilter] = useState<TimeRange | "date">("24h");
+  const [selectedActivityDate, setSelectedActivityDate] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [createDialog, setCreateDialog] = useState<{
@@ -128,9 +137,62 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
     [],
   );
 
-  const totalWorkspaces = filteredProjects.reduce((sum, p) => sum + p.workspaces.length, 0);
-  const totalAgents = filteredProjects.reduce((sum, p) =>
-    sum + p.workspaces.reduce((s, ws) => s + (filteredAgentsByWorkspace.get(ws.id)?.length ?? 0), 0),
+  const workspaceMeta = useMemo(() => {
+    const result = new Map<string, { projectId: string; projectDisplayName: string }>();
+    for (const project of projects) {
+      for (const workspace of project.workspaces) {
+        result.set(workspace.id, { projectId: project.projectId, projectDisplayName: project.projectDisplayName });
+      }
+    }
+    return result;
+  }, [projects]);
+  // Only include agents whose current project/workspace can be represented by the cards below.
+  const allAgents = useMemo(() => {
+    const result: AgentEntry[] = [];
+    for (const [workspaceId, agents] of agentsByWorkspace) {
+      if (!workspaceMeta.has(workspaceId)) continue;
+      result.push(...agents.map((agent) => agent.workspaceId ? agent : { ...agent, workspaceId }));
+    }
+    return result;
+  }, [agentsByWorkspace, workspaceMeta]);
+
+  const { days: heatmapDays, loading: heatmapLoading, maxCount: heatmapMaxCount, hasData: heatmapHasData } = useAgentActivityHeatmap(paseo, allAgents, theme);
+  const selectedActivityAgentIds = useMemo(() => {
+    if (!selectedActivityDate) return null;
+    const day = heatmapDays.find((candidate) => candidate.date === selectedActivityDate);
+    return new Set(day?.agents.map((agent) => agent.id) ?? []);
+  }, [heatmapDays, selectedActivityDate]);
+  const dateFilteredAgentsByWorkspace = useMemo(() => {
+    if (!selectedActivityAgentIds) return filteredAgentsByWorkspace;
+    const result = new Map<string, AgentEntry[]>();
+    for (const [workspaceId, agents] of agentsByWorkspace) {
+      const matching = agents.filter((agent) => selectedActivityAgentIds.has(agent.id));
+      if (matching.length > 0) result.set(workspaceId, matching);
+    }
+    return result;
+  }, [agentsByWorkspace, filteredAgentsByWorkspace, selectedActivityAgentIds]);
+  const dateFilteredProjects = useMemo(() => {
+    if (!selectedActivityAgentIds) return filteredProjects;
+    return projects.flatMap((project) => {
+      const workspaces = project.workspaces.filter((workspace) => dateFilteredAgentsByWorkspace.has(workspace.id));
+      return workspaces.length > 0 ? [{ ...project, workspaces }] : [];
+    });
+  }, [projects, filteredProjects, dateFilteredAgentsByWorkspace, selectedActivityAgentIds]);
+  const isDateFilterActive = activeTimeFilter === "date" && selectedActivityDate !== null;
+  const displayedProjects = isDateFilterActive ? dateFilteredProjects : filteredProjects;
+  const displayedAgentsByWorkspace = isDateFilterActive ? dateFilteredAgentsByWorkspace : filteredAgentsByWorkspace;
+  const displayedAutoExpand = useMemo(() => {
+    if (!isDateFilterActive) return autoExpand;
+    const result: Record<string, boolean> = {};
+    for (const project of dateFilteredProjects) {
+      result[project.projectId] = true;
+      for (const workspace of project.workspaces) result[workspace.id] = true;
+    }
+    return result;
+  }, [autoExpand, dateFilteredProjects, isDateFilterActive]);
+  const totalWorkspaces = displayedProjects.reduce((sum, project) => sum + project.workspaces.length, 0);
+  const totalAgents = displayedProjects.reduce((sum, project) =>
+    sum + project.workspaces.reduce((workspaceSum, workspace) => workspaceSum + (displayedAgentsByWorkspace.get(workspace.id)?.length ?? 0), 0),
   0);
   const horizontalPadding = layout.compact ? 12 : 20;
   const rightPanelInitialWidth = Math.max(360, Math.round(surfaceSize.width * 0.5));
@@ -225,7 +287,7 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
             </View>
           </View>
           <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12, marginTop: 2 }}>
-            {host.label} · {filteredProjects.length} 个项目 · {totalWorkspaces} 个分支 · {totalAgents} 个 agent
+            {host.label} · {displayedProjects.length} 个项目 · {totalWorkspaces} 个分支 · {totalAgents} 个 agent
           </Text>
           <View style={{ flexDirection: "row" as const, alignItems: "center" as const, marginTop: 8, gap: 8 }}>
             <View
@@ -237,12 +299,25 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
                 borderColor: theme.colors.foregroundMuted + "22",
               }}
             >
+              {selectedActivityDate ? (
+                <TouchableOpacity
+                  onPress={() => setActiveTimeFilter("date")}
+                  style={{ paddingHorizontal: 7, paddingVertical: 3, backgroundColor: isDateFilterActive ? theme.colors.accent + "22" : "transparent" }}
+                >
+                  <Text style={{ color: isDateFilterActive ? theme.colors.accent : theme.colors.foregroundMuted, fontSize: 11, fontWeight: isDateFilterActive ? "600" : "400" }}>
+                    {formatActivityDate(selectedActivityDate)}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
               {TIME_RANGES.map((r) => {
-                const active = timeRange === r.key;
+                const active = activeTimeFilter === r.key;
                 return (
                   <TouchableOpacity
                     key={r.key}
-                    onPress={() => setTimeRange(r.key)}
+                    onPress={() => {
+                      setTimeRange(r.key);
+                      setActiveTimeFilter(r.key);
+                    }}
                     style={{ paddingHorizontal: 7, paddingVertical: 3, backgroundColor: active ? theme.colors.accent + "22" : "transparent" }}
                   >
                     <Text style={{ color: active ? theme.colors.accent : theme.colors.foregroundMuted, fontSize: 11, fontWeight: active ? "600" as const : "400" as const }}>
@@ -283,17 +358,43 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
           </View>
         </View>
 
-        {filteredProjects.length === 0 ? (
-          <View style={{ flex: 1, alignItems: "center" as const, justifyContent: "center" as const, padding: 24 }}>
-            <Text style={{ color: theme.colors.foregroundMuted, textAlign: "center" as const }}>
-              {timeRange === "all" ? "No projects found." : "没有活跃会话。"}
-            </Text>
-          </View>
-        ) : (
-          <ScrollView
+        <ScrollView
             style={{ flex: 1 }}
             contentContainerStyle={{ paddingHorizontal: horizontalPadding, paddingBottom: 24, paddingTop: 4 }}
           >
+          {heatmapLoading ? (
+            <View style={{ paddingVertical: 16, alignItems: "center" }}>
+              <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12 }}>加载热度图中…</Text>
+            </View>
+          ) : !heatmapHasData ? (
+            <View style={{ paddingVertical: 16, alignItems: "center" }}>
+              <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12 }}>暂无活动数据，开始使用 Agent 后将在热力图中显示</Text>
+            </View>
+          ) : (
+            <HeatmapCalendar
+              days={heatmapDays}
+              maxCount={heatmapMaxCount}
+              theme={theme}
+              selectedDate={selectedActivityDate}
+              onSelectDate={(date) => {
+                if (selectedActivityDate === date) {
+                  setSelectedActivityDate(null);
+                  setActiveTimeFilter(timeRange);
+                  return;
+                }
+                setSelectedActivityDate(date);
+                setActiveTimeFilter("date");
+              }}
+              workspaceMeta={workspaceMeta}
+            />
+          )}
+          {displayedProjects.length === 0 ? (
+            <View style={{ flex: 1, alignItems: "center" as const, justifyContent: "center" as const, padding: 24 }}>
+              <Text style={{ color: theme.colors.foregroundMuted, textAlign: "center" as const }}>
+                {isDateFilterActive && selectedActivityDate ? `${formatActivityDate(selectedActivityDate)}没有 Agent 活动。` : timeRange === "all" ? "No projects found." : "没有活跃会话。"}
+              </Text>
+            </View>
+          ) : (
             <View
               onLayout={handleContainerLayout}
               style={{
@@ -304,7 +405,7 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
               }}
             >
               {columns > 0 && cardWidth > 0 &&
-                filteredProjects.map((project) => {
+                displayedProjects.map((project) => {
                   const projectDirectory = projectSourceDirectory(project.workspaces);
                   return (
                     <ProjectCard
@@ -312,9 +413,9 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
                       projectId={project.projectId}
                       projectDisplayName={project.projectDisplayName}
                       workspaces={project.workspaces}
-                      agentsByWorkspace={filteredAgentsByWorkspace}
-                      expanded={{ ...autoExpand, ...expanded }}
-                      cardExpanded={{ ...autoExpand, ...cardExpanded }}
+                      agentsByWorkspace={displayedAgentsByWorkspace}
+                      expanded={{ ...displayedAutoExpand, ...expanded }}
+                      cardExpanded={{ ...displayedAutoExpand, ...cardExpanded }}
                       onToggleCard={handleToggleCard}
                       onToggleBranch={handleToggleBranch}
                       onOpenDirectory={handleOpenDirectory}
@@ -355,8 +456,8 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
                   <View key={`spacer-${i}`} style={{ width: cardWidth }} />
                 ))}
             </View>
-          </ScrollView>
-        )}
+          )}
+        </ScrollView>
         </View>
         {selectedAgent && (!layout.compact || !navigation) ? (
           <AgentConversationPreview
