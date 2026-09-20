@@ -166,11 +166,13 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
     if (!selectedActivityAgentIds) return filteredAgentsByWorkspace;
     const result = new Map<string, AgentEntry[]>();
     for (const [workspaceId, agents] of agentsByWorkspace) {
-      const matching = agents.filter((agent) => selectedActivityAgentIds.has(agent.id));
+      const matching = agents.filter((agent) =>
+        selectedActivityAgentIds.has(agent.id) && (showArchived || !agent.archivedAt),
+      );
       if (matching.length > 0) result.set(workspaceId, matching);
     }
     return result;
-  }, [agentsByWorkspace, filteredAgentsByWorkspace, selectedActivityAgentIds]);
+  }, [agentsByWorkspace, filteredAgentsByWorkspace, selectedActivityAgentIds, showArchived]);
   const dateFilteredProjects = useMemo(() => {
     if (!selectedActivityAgentIds) return filteredProjects;
     return projects.flatMap((project) => {
