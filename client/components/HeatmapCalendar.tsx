@@ -80,7 +80,7 @@ export const HeatmapCalendar = React.memo(function HeatmapCalendar({ days, maxCo
   }, [days, gridStart, totalWeeks]);
 
   return (
-    <View onLayout={(event) => setCalendarSize({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })} style={{ marginTop: 12, marginBottom: 16, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface1, position: "relative" }}>
+    <View onLayout={(event) => setCalendarSize({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })} style={{ marginBottom: 12, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface1, position: "relative" }}>
       <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }}>
         <Text style={{ color: colors.foregroundMuted, fontSize: 11 }}>近一年每日 Agent 活动</Text>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
