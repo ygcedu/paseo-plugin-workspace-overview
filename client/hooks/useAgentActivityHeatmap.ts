@@ -96,8 +96,10 @@ function buildDaysFromAgents(agents: AgentEntry[]): { days: HeatmapDay[]; hasDat
 
   let totalActivity = 0;
   for (const agent of agents) {
-    // Use lastUserMessageAt > updatedAt > archivedAt as fallback
-    const iso = agent.lastUserMessageAt ?? agent.updatedAt ?? agent.archivedAt;
+    // Only real user-message activity belongs on the heatmap. updatedAt can
+    // change for status/metadata updates, and archivedAt records archival time;
+    // using either would move an old conversation onto the wrong day.
+    const iso = agent.lastUserMessageAt;
     if (!iso) continue;
     const ts = new Date(iso).getTime();
     if (Number.isNaN(ts) || ts < cutoffMs) continue;

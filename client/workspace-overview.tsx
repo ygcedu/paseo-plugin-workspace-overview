@@ -138,12 +138,12 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
   );
 
   const workspaceMeta = useMemo(() => {
-    const result = new Map<string, { projectId: string; projectDisplayName: string }>();
-    for (const project of projects) {
+    const result = new Map<string, { projectId: string; projectDisplayName: string; projectOrder: number }>();
+    projects.forEach((project, projectOrder) => {
       for (const workspace of project.workspaces) {
-        result.set(workspace.id, { projectId: project.projectId, projectDisplayName: project.projectDisplayName });
+        result.set(workspace.id, { projectId: project.projectId, projectDisplayName: project.projectDisplayName, projectOrder });
       }
-    }
+    });
     return result;
   }, [projects]);
   // Only include agents whose current project/workspace can be represented by the cards below.

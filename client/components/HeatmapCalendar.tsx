@@ -18,6 +18,7 @@ function getColorLevel(count: number, maxCount: number): ColorLevel {
 export interface HeatmapWorkspaceMeta {
   projectId: string;
   projectDisplayName: string;
+  projectOrder: number;
 }
 
 interface HeatmapCalendarProps {
@@ -52,14 +53,14 @@ export const HeatmapCalendar = React.memo(function HeatmapCalendar({ days, maxCo
 
   const hoveredProjects = useMemo(() => {
     if (!hoveredDay) return [];
-    const counts = new Map<string, { id: string; name: string; count: number }>();
+    const counts = new Map<string, { id: string; name: string; count: number; order: number }>();
     for (const agent of hoveredDay.agents) {
       const meta = agent.workspaceId ? workspaceMeta.get(agent.workspaceId) : undefined;
       const key = meta?.projectId ?? "unknown";
       const current = counts.get(key);
-      counts.set(key, { id: key, name: meta?.projectDisplayName ?? "其他项目", count: (current?.count ?? 0) + 1 });
+      counts.set(key, { id: key, name: meta?.projectDisplayName ?? "其他项目", count: (current?.count ?? 0) + 1, order: meta?.projectOrder ?? Number.MAX_SAFE_INTEGER });
     }
-    return [...counts.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+    return [...counts.values()].sort((a, b) => a.order - b.order);
   }, [hoveredDay, workspaceMeta]);
 
   const rows = useMemo(() => {
