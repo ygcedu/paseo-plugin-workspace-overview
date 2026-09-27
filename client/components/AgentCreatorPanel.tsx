@@ -11,6 +11,7 @@ import { SharedComposerInput } from "./SharedComposerInput";
 import { ResizeHandle } from "./ResizeHandle";
 import { useKeyboardInset } from "../hooks/useKeyboardInset";
 import { ensureSelection } from "../workspace-creator/submit-workspace";
+import type { PastedImage } from "../web";
 
 interface AgentCreatorPanelProps {
   workspace: WorkspaceEntry;
@@ -28,6 +29,7 @@ export function AgentCreatorPanel({ workspace, paseo, theme, compact, initialPan
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
+  const [images, setImages] = useState<PastedImage[]>([]);
   const keyboardInset = useKeyboardInset(compact);
   const { snapshot, selection, setSelection, loading, error: providerError } = useProviderCatalog(
     paseo,
@@ -62,7 +64,7 @@ export function AgentCreatorPanel({ workspace, paseo, theme, compact, initialPan
 
   const submit = useCallback(async () => {
     const nextPrompt = prompt.trim();
-    if (!nextPrompt) return;
+    if (!nextPrompt && images.length === 0) return;
     setPending(true);
     setError(null);
     try {
@@ -80,15 +82,17 @@ export function AgentCreatorPanel({ workspace, paseo, theme, compact, initialPan
           ...(resolvedSelection.thinkingOptionId ? { thinkingOptionId: resolvedSelection.thinkingOptionId } : {}),
         },
         prompt: nextPrompt,
+        images: images.map(({ data, mimeType }) => ({ data, mimeType })),
       });
       setPrompt("");
+      setImages([]);
       onCreated(agent);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : String(submitError));
     } finally {
       setPending(false);
     }
-  }, [onCreated, paseo, prompt, selection, setSelection, snapshot, workspace.id, workspace.workspaceDirectory]);
+  }, [images, onCreated, paseo, prompt, selection, setSelection, snapshot, workspace.id, workspace.workspaceDirectory]);
 
   const styles = useMemo(() => ({
     panel: { height: "100%", borderLeftWidth: 1, borderLeftColor: theme.colors.foregroundMuted + "22", backgroundColor: theme.colors.surface0 } as ViewStyle,
@@ -133,6 +137,9 @@ export function AgentCreatorPanel({ workspace, paseo, theme, compact, initialPan
         value={prompt}
         onChangeText={setPrompt}
         onSubmit={submit}
+        images={images}
+        onImagesChange={setImages}
+        onPasteError={setError}
       />
       {error ?? providerError ? <Text style={styles.error}>{error ?? providerError}</Text> : null}
     </View>

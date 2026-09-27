@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from "react";
-import { Pressable, Text, View, type NativeSyntheticEvent, type TextInputKeyPressEventData } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { Image, Platform, Pressable, Text, View, useWindowDimensions, type NativeSyntheticEvent, type TextInputKeyPressEventData } from "react-native";
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
-import { Icon, TextInput } from "@getpaseo/plugin/client/react-native";
+import { Icon, Modal, TextInput } from "@getpaseo/plugin/client/react-native";
 import { ModelBrowserMenu } from "./ModelBrowserMenu";
 import { Menu } from "./WorkspaceMenu";
 import { SelectControl } from "./WorkspaceSelectControl";
@@ -18,6 +18,7 @@ import type {
   ProviderSnapshot,
 } from "../workspace-creator/types";
 import { createComposerStyles } from "./workspace-creator-styles";
+import { subscribeToImagePaste, type PastedImage } from "../web";
 
 function getColors(theme: PluginSurfaceProps["theme"]) {
   if (!theme || !theme.colors) {
@@ -33,6 +34,82 @@ function getColors(theme: PluginSurfaceProps["theme"]) {
     };
   }
   return theme.colors;
+}
+
+function PastedImagePill({
+  image,
+  disabled,
+  onRemove,
+  theme,
+}: {
+  image: PastedImage;
+  disabled: boolean;
+  onRemove: () => void;
+  theme: PluginSurfaceProps["theme"];
+}) {
+  const [hovered, setHovered] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const { height } = useWindowDimensions();
+  const showRemove = Platform.OS !== "web" || hovered;
+  return (
+    <View style={{ position: "relative" }}>
+      <Modal title={image.fileName} open={previewOpen} onOpenChange={setPreviewOpen}>
+        <Modal.Content scrollable={false}>
+          <Image
+            accessibilityLabel={`图片预览 ${image.fileName}`}
+            source={{ uri: image.dataUrl }}
+            resizeMode="contain"
+            style={{ width: "100%", height: Math.max(120, Math.min(640, height * 0.65)) }}
+          />
+        </Modal.Content>
+      </Modal>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`打开图片 ${image.fileName}`}
+        onPress={() => setPreviewOpen(true)}
+        disabled={disabled}
+        onHoverIn={() => setHovered(true)}
+        onHoverOut={() => setHovered(false)}
+        style={{
+          width: 50,
+          height: 50,
+          borderRadius: 8,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          overflow: "hidden",
+        }}
+      >
+        <Image source={{ uri: image.dataUrl }} style={{ width: 48, height: 48 }} resizeMode="cover" />
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`移除图片 ${image.fileName}`}
+        disabled={disabled}
+        hitSlop={8}
+        onHoverIn={() => setHovered(true)}
+        onHoverOut={() => setHovered(false)}
+        onPress={onRemove}
+        style={{
+          position: "absolute",
+          top: -8,
+          left: -8,
+          width: 24,
+          height: 24,
+          borderRadius: 12,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          backgroundColor: theme.colors.surface2,
+          alignItems: "center",
+          justifyContent: "center",
+          opacity: showRemove ? 1 : 0,
+          pointerEvents: showRemove ? "auto" : "none",
+          zIndex: 1,
+        }}
+      >
+        <Icon name="X" size={12} color={theme.colors.foregroundMuted} />
+      </Pressable>
+    </View>
+  );
 }
 
 export interface SharedComposerInputProps {
@@ -69,6 +146,9 @@ export interface SharedComposerInputProps {
   value: string;
   onChangeText: (value: string) => void;
   onSubmit: () => void | Promise<void>;
+  images?: PastedImage[];
+  onImagesChange?: (images: PastedImage[]) => void;
+  onPasteError?: (message: string) => void;
   usage?: { contextWindowMaxTokens?: number; contextWindowUsedTokens?: number; totalCostUsd?: number } | null;
   onKeyPress?: (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => void;
 }
@@ -95,13 +175,16 @@ export function SharedComposerInput({
   value,
   onChangeText,
   onSubmit,
+  images = [],
+  onImagesChange,
+  onPasteError,
   usage = null,
   onKeyPress,
 }: SharedComposerInputProps) {
   const [usageOpen, setUsageOpen] = useState(false);
   const colors = getColors(theme);
   const styles = useMemo(() => createComposerStyles(theme), [theme]);
-  const hasInput = value.trim().length > 0;
+  const hasInput = value.trim().length > 0 || images.length > 0;
   const usagePercentage = usage?.contextWindowMaxTokens && usage.contextWindowUsedTokens != null
     ? Math.max(0, Math.min(100, Math.round((usage.contextWindowUsedTokens / usage.contextWindowMaxTokens) * 100)))
     : null;
@@ -148,8 +231,28 @@ export function SharedComposerInput({
   const composerMenuOpen =
     openMenu === "model" || openMenu === "mode" || openMenu === "thinking";
 
+  useEffect(() => subscribeToImagePaste(
+    inputNativeID,
+    (pasted) => onImagesChange?.([...images, ...pasted]),
+    (message) => onPasteError?.(message),
+  ), [images, inputNativeID, onImagesChange, onPasteError]);
+
   return (
     <View style={[styles.inputWrapper, composerMenuOpen && styles.menuRegionActive]}>
+      {images.length > 0 ? (
+        <View accessibilityLabel="图片附件" style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+          {images.map((image, index) => (
+            <PastedImagePill
+              key={`${image.fileName}-${index}`}
+              image={image}
+              disabled={disabled}
+              onRemove={() => onImagesChange?.(images.filter((_, imageIndex) => imageIndex !== index))}
+              theme={theme}
+            />
+          ))}
+        </View>
+      ) : null}
+
       <TextInput
         nativeID={inputNativeID}
         style={styles.textInput}

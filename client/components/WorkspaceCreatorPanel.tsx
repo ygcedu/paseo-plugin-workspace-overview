@@ -10,6 +10,7 @@ import type { Isolation, LaunchTarget, OpenMenu, WorkspaceCreatorPanelProps } fr
 import { terminalLaunchRpc } from "../../shared/terminal-launch";
 import { useProviderCatalog, useTerminalProfiles } from "../workspace-creator/useProviderCatalog";
 import { useKeyboardInset } from "../hooks/useKeyboardInset";
+import type { PastedImage } from "../web";
 
 export function WorkspaceCreatorPanel({
   projectId,
@@ -30,6 +31,7 @@ export function WorkspaceCreatorPanel({
   const [error, setError] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
   const [prompt, setPrompt] = useState("");
+  const [images, setImages] = useState<PastedImage[]>([]);
   const [isolation, setIsolation] = useState<Isolation>("worktree");
   const [baseBranch, setBaseBranch] = useState(() => {
     const initialProject = projects.find((project) => project.projectId === projectId);
@@ -137,10 +139,14 @@ export function WorkspaceCreatorPanel({
           onCreate?.();
           onClose();
         },
+        images,
     }, prompt);
-    if (submitted) setPrompt("");
+    if (submitted) {
+      setPrompt("");
+      setImages([]);
+    }
   },
-    [baseBranch, hostId, isolation, launchTarget, launchTerminal, navigation, onClose, onCreate, paseo, prompt, selectedProject, selection, snapshot, terminalProfiles],
+    [baseBranch, hostId, images, isolation, launchTarget, launchTerminal, navigation, onClose, onCreate, paseo, prompt, selectedProject, selection, snapshot, terminalProfiles],
   );
 
   const close = useCallback(() => {
@@ -223,6 +229,8 @@ export function WorkspaceCreatorPanel({
           onPromptChange={setPrompt}
           onSubmit={submit}
           compact={layout.compact}
+          images={launchTarget.kind === "chat" ? images : []}
+          onImagesChange={launchTarget.kind === "chat" ? setImages : () => {}}
         />
       </View>
     </>

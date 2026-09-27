@@ -1,6 +1,7 @@
 import { PROVIDER_READY_TIMEOUT_MS } from "./constants";
 import { defaultSelection, providerModelId } from "./provider-selection";
 import type { ComposerSelection, Isolation, LaunchTarget, PaseoClient, ProviderSnapshot, TerminalProfile, WorkspaceProjectOption } from "./types";
+import type { PastedImage } from "../web";
 
 function createWorktreeSlug(): string { return `workspace-${Date.now().toString(36)}`; }
 
@@ -26,15 +27,17 @@ interface SubmitWorkspaceInput {
   openAgent: (agentId: string) => void | Promise<unknown>; serverId: string;
   setSelection: (selection: ComposerSelection) => void; setPending: (pending: boolean) => void;
   setError: (error: string | null) => void; onDone: () => void;
+  images: PastedImage[];
 }
 
 export async function submitWorkspacePrompt(input: SubmitWorkspaceInput, rawPrompt: string): Promise<boolean> {
   const prompt = rawPrompt.trim();
-  if (!prompt || !input.project) return false;
+  if ((!prompt && input.images.length === 0) || !input.project) return false;
   input.setPending(true); input.setError(null);
   try {
     const source = workspaceSource(input.project, input.isolation, input.baseBranch);
     if (input.launchTarget.kind === "terminal") {
+      if (!prompt) return false;
       const profileId = input.launchTarget.profileId;
       const workspace = await input.paseo.workspaces.create({ source });
       const current = workspace.current() ?? await workspace.refresh();
@@ -45,10 +48,11 @@ export async function submitWorkspacePrompt(input: SubmitWorkspaceInput, rawProm
     } else {
       const selection = await ensureSelection({ paseo: input.paseo, projectDirectory: input.project.projectDirectory, snapshot: input.snapshot, selection: input.selection });
       input.setSelection(selection);
-      const workspace = await input.paseo.workspaces.create({ source, firstAgentContext: { prompt } });
+      const workspace = await input.paseo.workspaces.create({ source, ...(prompt ? { firstAgentContext: { prompt } } : {}) });
       const agent = await workspace.agents.create({
         config: { provider: providerModelId(selection), ...(selection.modeId ? { modeId: selection.modeId } : {}), ...(selection.thinkingOptionId ? { thinkingOptionId: selection.thinkingOptionId } : {}) },
         prompt,
+        images: input.images.map(({ data, mimeType }) => ({ data, mimeType })),
       });
       await input.openAgent(agent.id);
     }

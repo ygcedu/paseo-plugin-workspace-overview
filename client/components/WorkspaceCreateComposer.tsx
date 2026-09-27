@@ -9,6 +9,7 @@ import { createComposerStyles } from "./workspace-creator-styles";
 import { ProviderBrandIcon } from "./ProviderBrandIcon";
 import { WorkspaceLaunchMenu } from "./WorkspaceLaunchMenu";
 import { SharedComposerInput } from "./SharedComposerInput";
+import type { PastedImage } from "../web";
 
 export function WorkspaceCreateComposer({
   project,
@@ -34,6 +35,8 @@ export function WorkspaceCreateComposer({
   onPromptChange,
   onSubmit,
   compact,
+  images,
+  onImagesChange,
 }: {
   project: WorkspaceProjectOption | null;
   isolation: Isolation;
@@ -58,6 +61,8 @@ export function WorkspaceCreateComposer({
   onPromptChange: (value: string) => void;
   onSubmit: () => void | Promise<void>;
   compact: boolean;
+  images: PastedImage[];
+  onImagesChange: (images: PastedImage[]) => void;
 }) {
   const styles = useMemo(() => createComposerStyles(theme), [theme]);
 
@@ -155,6 +160,8 @@ export function WorkspaceCreateComposer({
           value={prompt}
           onChangeText={onPromptChange}
           onSubmit={onSubmit}
+          images={images}
+          onImagesChange={onImagesChange}
         />
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
       </View>
