@@ -18,7 +18,7 @@ export interface ProviderModel {
 }
 export interface ProviderEntry {
   provider: string; status: "ready" | "loading" | "error" | "unavailable" | string;
-  enabled?: boolean; label?: string; defaultModeId?: string | null;
+  enabled?: boolean; label?: string; error?: string; defaultModeId?: string | null;
   modes?: Array<{ id: string; label?: string; description?: string; icon?: string }>;
   models?: ProviderModel[];
 }
