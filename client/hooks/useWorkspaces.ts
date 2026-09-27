@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { usePaseo } from "@getpaseo/plugin/client";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { type WorkspaceEntry, type AgentEntry } from "../../shared/overview-types";
 
 export interface UseWorkspacesResult {
@@ -18,19 +18,23 @@ export interface UseWorkspacesResult {
 export function useWorkspaces(hostId: string): UseWorkspacesResult {
   const paseo = usePaseo();
 
-  const { data: wsResult, isLoading: wsLoading, error: wsError, refetch } = useQuery({
+  const { data: wsResult, isLoading: wsLoading, error: wsError, refetch: refetchWorkspaces } = useQuery({
     queryKey: ["ws-list", hostId],
     queryFn: () => paseo.workspaces.list({ subscribe: {} }),
     refetchInterval: 5000,
     staleTime: 3000,
   });
 
-  const { data: agResult, isLoading: agLoading } = useQuery({
+  const { data: agResult, isLoading: agLoading, error: agError, refetch: refetchAgents } = useQuery({
     queryKey: ["ag-list", hostId],
     queryFn: () => paseo.agents.list({ filter: { includeArchived: true } }),
     refetchInterval: 5000,
     staleTime: 3000,
   });
+
+  const refetch = useCallback(() => {
+    void Promise.all([refetchWorkspaces(), refetchAgents()]);
+  }, [refetchWorkspaces, refetchAgents]);
 
   const { projects, agentsByWorkspace } = useMemo(() => {
     const workspaces = (wsResult?.entries ?? []) as WorkspaceEntry[];
@@ -109,7 +113,7 @@ export function useWorkspaces(hostId: string): UseWorkspacesResult {
     projects,
     agentsByWorkspace,
     isLoading: wsLoading || agLoading,
-    error: wsError,
+    error: wsError ?? agError,
     refetch,
   };
 }

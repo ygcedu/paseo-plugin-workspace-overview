@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRpc } from "@getpaseo/plugin/client";
 import { copyText } from "@getpaseo/plugin/client/react-native";
 
@@ -18,28 +18,46 @@ export function useAutoCommit(cwd: string | undefined, onDone: () => void) {
   const [state, setState] = useState<AutoCommitState>({ kind: "idle" });
   const [copied, setCopied] = useState(false);
 
+  const runRef = useRef<{ cancelled: boolean; cancelWait?: () => void } | null>(null);
+
   useEffect(() => {
-    if (state.kind !== "error") return;
+    setPending(false);
+    setState({ kind: "idle" });
     setCopied(false);
-    const timer = setTimeout(() => setState({ kind: "idle" }), 8_000);
-    return () => clearTimeout(timer);
-  }, [state]);
+    return () => {
+      const run = runRef.current;
+      if (run) {
+        run.cancelled = true;
+        run.cancelWait?.();
+      }
+      runRef.current = null;
+    };
+  }, [cwd]);
 
   const start = useCallback(async () => {
-    if (pending) return;
+    if (runRef.current) return;
     if (!cwd) {
       setState({ kind: "error", message: "当前 agent 没有可用工作目录" });
       return;
     }
+    const run = { cancelled: false } as { cancelled: boolean; cancelWait?: () => void };
+    runRef.current = run;
     setPending(true);
     setCopied(false);
     setState({ kind: "preparing", message: "正在启动 Pi 独立进程" });
     try {
       const { taskId } = await startTask({ cwd });
+      if (run.cancelled) return;
       setState({ kind: "running", taskId, message: "Pi 已启动，正在提交" });
       for (;;) {
-        await new Promise((resolve) => setTimeout(resolve, 1_200));
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, 1_200);
+          run.cancelWait = () => { clearTimeout(timer); resolve(); };
+        });
+        run.cancelWait = undefined;
+        if (run.cancelled) return;
         const status = await getTaskStatus({ taskId });
+        if (run.cancelled) return;
         const message = status.output.trim().split("\n").filter(Boolean).slice(-1)[0] ?? "Pi 正在运行";
         if (status.status === "running") {
           setState({ kind: "running", taskId, message });
@@ -54,11 +72,15 @@ export function useAutoCommit(cwd: string | undefined, onDone: () => void) {
         return;
       }
     } catch (error) {
+      if (run.cancelled) return;
       setState({ kind: "error", message: error instanceof Error ? error.message : String(error) });
     } finally {
-      setPending(false);
+      if (runRef.current === run) {
+        runRef.current = null;
+        setPending(false);
+      }
     }
-  }, [cwd, getTaskStatus, onDone, pending, startTask]);
+  }, [cwd, getTaskStatus, onDone, startTask]);
 
   const copyError = useCallback(() => {
     if (state.kind !== "error") return;

@@ -1,4 +1,5 @@
 import { execFile, spawn } from "node:child_process";
+import { realpath } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join, parse } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,6 +22,7 @@ interface AutoCommitTask {
 }
 
 const tasks = new Map<string, AutoCommitTask>();
+const startingDirectories = new Set<string>();
 
 function getModuleDirectory(): string | null {
   const metaUrl = (import.meta as { url?: string }).url;
@@ -153,46 +155,55 @@ function scheduleTaskCleanup(taskId: string) {
 }
 
 export async function startAutoCommitTask({ cwd }: { cwd: string }): Promise<{ taskId: string; cwd: string }> {
-  const info = await readAutoCommitInfoForDirectory(cwd);
-  if (!info.hasChanges) {
-    throw new Error("没有待提交改动");
+  const directory = await realpath(cwd);
+  const running = [...tasks.values()].find((task) => task.cwd === directory && task.status === "running");
+  if (running) return { taskId: running.taskId, cwd: running.cwd };
+  if (startingDirectories.has(directory)) throw new Error("当前仓库正在启动提交任务，请稍后重试");
+  startingDirectories.add(directory);
+  try {
+    const info = await readAutoCommitInfoForDirectory(directory);
+    if (!info.hasChanges) {
+      throw new Error("没有待提交改动");
+    }
+
+    const task: AutoCommitTask = {
+      taskId: randomUUID(),
+      cwd: info.cwd,
+      status: "running",
+      output: "",
+      error: null,
+      exitCode: null,
+      startedAt: new Date().toISOString(),
+      finishedAt: null,
+    };
+    tasks.set(task.taskId, task);
+
+    const child = spawn("pi", ["--model", PI_MODEL, "--approve", "-p", buildAutoCommitPrompt()], {
+      cwd: info.cwd,
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    child.stdout.on("data", (chunk) => appendTaskOutput(task, chunk));
+    child.stderr.on("data", (chunk) => appendTaskOutput(task, chunk));
+    child.on("error", (error) => {
+      task.status = "error";
+      task.error = error.message;
+      task.finishedAt = new Date().toISOString();
+      scheduleTaskCleanup(task.taskId);
+    });
+    child.on("close", (code) => {
+      task.exitCode = code;
+      task.status = code === 0 ? "done" : "error";
+      task.error = code === 0 ? null : task.error ?? `pi 进程退出，exit code ${code}`;
+      task.finishedAt = new Date().toISOString();
+      scheduleTaskCleanup(task.taskId);
+    });
+
+    return { taskId: task.taskId, cwd: task.cwd };
+  } finally {
+    startingDirectories.delete(directory);
   }
-
-  const task: AutoCommitTask = {
-    taskId: randomUUID(),
-    cwd: info.cwd,
-    status: "running",
-    output: "",
-    error: null,
-    exitCode: null,
-    startedAt: new Date().toISOString(),
-    finishedAt: null,
-  };
-  tasks.set(task.taskId, task);
-
-  const child = spawn("pi", ["--model", PI_MODEL, "--approve", "-p", buildAutoCommitPrompt()], {
-    cwd: info.cwd,
-    env: process.env,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-
-  child.stdout.on("data", (chunk) => appendTaskOutput(task, chunk));
-  child.stderr.on("data", (chunk) => appendTaskOutput(task, chunk));
-  child.on("error", (error) => {
-    task.status = "error";
-    task.error = error.message;
-    task.finishedAt = new Date().toISOString();
-    scheduleTaskCleanup(task.taskId);
-  });
-  child.on("close", (code) => {
-    task.exitCode = code;
-    task.status = code === 0 ? "done" : "error";
-    task.error = code === 0 ? null : task.error ?? `pi 进程退出，exit code ${code}`;
-    task.finishedAt = new Date().toISOString();
-    scheduleTaskCleanup(task.taskId);
-  });
-
-  return { taskId: task.taskId, cwd: task.cwd };
 }
 
 export function readAutoCommitTaskStatus(taskId: string): AutoCommitTask {
