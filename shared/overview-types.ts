@@ -78,7 +78,7 @@ export interface ProjectCardProps {
   onOpenDirectory: (directory: string) => void;
   theme: PluginTheme;
   compact: boolean;
-  width: number;
+  width: number | "100%";
   hostLabel: string;
   hostId: string;
   onSelectAgent: (agent: AgentEntry) => void;

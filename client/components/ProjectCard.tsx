@@ -6,7 +6,7 @@ import { type WorkspaceEntry, type AgentEntry, type ProjectCardProps } from "../
 import { BranchRow } from "./BranchRow";
 import { AgentRow } from "./AgentRow";
 
-const CARD_GAP = 16;
+const CARD_GAP = 12;
 
 /** Decide whether an agent should auto-expand its surroundings on first view. */
 function shouldAutoExpandAgent(agent: AgentEntry): boolean {

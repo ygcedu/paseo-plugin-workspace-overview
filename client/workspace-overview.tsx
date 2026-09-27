@@ -97,8 +97,9 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
   );
 
   const handleContainerLayout = useCallback((e: LayoutChangeEvent) => {
-    setContainerWidth(e.nativeEvent.layout.width);
-  }, []);
+    const width = e.nativeEvent.layout.width - (layout.compact ? 12 : 20) * 2;
+    if (width > 0) setContainerWidth(width);
+  }, [layout.compact]);
 
   const handleToggleBranch = useCallback((workspaceId: string, currentEffective: boolean) => {
     setExpanded((prev) => ({ ...prev, [workspaceId]: !currentEffective }));
@@ -109,7 +110,9 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
   }, []);
 
   const { columns, cardWidth } = useMemo(() => {
-    if (containerWidth <= 0) return { columns: 1, cardWidth: 0 };
+    // Render a full-width card before measurement so an empty grid cannot
+    // prevent its own initial layout event.
+    if (containerWidth <= 0) return { columns: 1, cardWidth: "100%" as const };
     const CARD_GAP = 16;
     const CARD_TARGET_WIDTH = 360;
     const CARD_MIN_WIDTH = 280;
@@ -361,6 +364,7 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
         </View>
 
         <ScrollView
+            onLayout={handleContainerLayout}
             style={{ flex: 1 }}
             contentContainerStyle={{ paddingHorizontal: horizontalPadding, paddingBottom: 24, paddingTop: 4 }}
           >
@@ -398,16 +402,15 @@ export function WorkspaceOverview({ theme, host, layout, navigation }: PluginSur
             </View>
           ) : (
             <View
-              onLayout={handleContainerLayout}
               style={{
+                width: "100%",
                 flexDirection: "row" as const,
                 flexWrap: "wrap" as const,
                 justifyContent: "space-between" as const,
                 alignItems: "flex-start" as const,
               }}
             >
-              {columns > 0 && cardWidth > 0 &&
-                displayedProjects.map((project) => {
+              {displayedProjects.map((project) => {
                   const projectDirectory = projectSourceDirectory(project.workspaces);
                   return (
                     <ProjectCard
