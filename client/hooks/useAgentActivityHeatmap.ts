@@ -119,7 +119,6 @@ function buildDaysFromAgents(agents: AgentEntry[]): { days: HeatmapDay[]; hasDat
     }
   }
 
-  console.log(`[Heatmap] agents=${agents.length}, totalActivity=${totalActivity}`);
 
   return { days: cells, hasData: totalActivity > 0 };
 }
