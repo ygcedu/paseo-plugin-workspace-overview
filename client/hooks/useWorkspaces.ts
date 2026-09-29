@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { usePaseo } from "@getpaseo/plugin/client";
 import { useCallback, useMemo } from "react";
 import { type WorkspaceEntry, type AgentEntry } from "../../shared/overview-types";
+import { agentActivityMs } from "../../shared/agent-activity";
 
 /** Type guard: verify an object is a valid WorkspaceEntry at runtime. */
 function isWorkspaceEntry(obj: unknown): obj is WorkspaceEntry {
@@ -55,13 +56,6 @@ export function useWorkspaces(hostId: string): UseWorkspacesResult {
     const workspaces = (wsResult?.entries ?? []).filter(isWorkspaceEntry);
     const agents = (agResult?.entries ?? []) as Array<{ agent: AgentEntry }>;
 
-    // Activity timestamp (ms) for an agent; 0 when unknown (sorts last).
-    const agentActivity = (a: AgentEntry): number => {
-      const iso = a.lastUserMessageAt ?? a.updatedAt;
-      const t = iso ? new Date(iso).getTime() : 0;
-      return Number.isNaN(t) ? 0 : t;
-    };
-
     const agentsByWs = new Map<string, AgentEntry[]>();
     for (const entry of agents) {
       const wsId = entry.agent.workspaceId;
@@ -72,7 +66,7 @@ export function useWorkspaces(hostId: string): UseWorkspacesResult {
     }
     // Sort agents inside each workspace by last activity, newest first.
     for (const list of agentsByWs.values()) {
-      list.sort((a, b) => agentActivity(b) - agentActivity(a));
+      list.sort((a, b) => agentActivityMs(b) - agentActivityMs(a));
     }
 
     const byProject = new Map<string, { projectId: string; projectDisplayName: string; workspaces: WorkspaceEntry[] }>();
@@ -97,7 +91,7 @@ export function useWorkspaces(hostId: string): UseWorkspacesResult {
       const agents = agentsByWs.get(ws.id) ?? [];
       let latest = 0;
       for (const a of agents) {
-        const t = agentActivity(a);
+        const t = agentActivityMs(a);
         if (t > latest) latest = t;
       }
       if (latest > 0) return latest;

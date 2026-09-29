@@ -19,6 +19,7 @@ interface AutoCommitTask {
   exitCode: number | null;
   startedAt: string;
   finishedAt: string | null;
+  cleanupScheduled: boolean;
 }
 
 const tasks = new Map<string, AutoCommitTask>();
@@ -175,6 +176,7 @@ export async function startAutoCommitTask({ cwd }: { cwd: string }): Promise<{ t
       exitCode: null,
       startedAt: new Date().toISOString(),
       finishedAt: null,
+      cleanupScheduled: false,
     };
     tasks.set(task.taskId, task);
 
@@ -190,14 +192,20 @@ export async function startAutoCommitTask({ cwd }: { cwd: string }): Promise<{ t
       task.status = "error";
       task.error = error.message;
       task.finishedAt = new Date().toISOString();
-      scheduleTaskCleanup(task.taskId);
+      if (!task.cleanupScheduled) {
+        task.cleanupScheduled = true;
+        scheduleTaskCleanup(task.taskId);
+      }
     });
     child.on("close", (code) => {
       task.exitCode = code;
       task.status = code === 0 ? "done" : "error";
       task.error = code === 0 ? null : task.error ?? `pi 进程退出，exit code ${code}`;
       task.finishedAt = new Date().toISOString();
-      scheduleTaskCleanup(task.taskId);
+      if (!task.cleanupScheduled) {
+        task.cleanupScheduled = true;
+        scheduleTaskCleanup(task.taskId);
+      }
     });
 
     return { taskId: task.taskId, cwd: task.cwd };
