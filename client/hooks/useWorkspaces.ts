@@ -3,6 +3,21 @@ import { usePaseo } from "@getpaseo/plugin/client";
 import { useCallback, useMemo } from "react";
 import { type WorkspaceEntry, type AgentEntry } from "../../shared/overview-types";
 
+/** Type guard: verify an object is a valid WorkspaceEntry at runtime. */
+function isWorkspaceEntry(obj: unknown): obj is WorkspaceEntry {
+  return (
+    typeof obj === "object" &&
+    obj !== null &&
+    "id" in obj &&
+    "projectId" in obj &&
+    "projectDisplayName" in obj &&
+    "name" in obj &&
+    "status" in obj &&
+    "workspaceKind" in obj &&
+    "workspaceDirectory" in obj
+  );
+}
+
 export interface UseWorkspacesResult {
   projects: Array<{
     projectId: string;
@@ -37,7 +52,7 @@ export function useWorkspaces(hostId: string): UseWorkspacesResult {
   }, [refetchWorkspaces, refetchAgents]);
 
   const { projects, agentsByWorkspace } = useMemo(() => {
-    const workspaces = (wsResult?.entries ?? []) as WorkspaceEntry[];
+    const workspaces = (wsResult?.entries ?? []).filter(isWorkspaceEntry);
     const agents = (agResult?.entries ?? []) as Array<{ agent: AgentEntry }>;
 
     // Activity timestamp (ms) for an agent; 0 when unknown (sorts last).

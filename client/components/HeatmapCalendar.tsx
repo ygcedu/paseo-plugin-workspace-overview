@@ -33,13 +33,17 @@ export const HeatmapCalendar = React.memo(function HeatmapCalendar({ days, maxCo
   const ROW_H = CELL + GAP;
   const GRID_WIDTH = totalWeeks * COLUMN_W;
   const TOOLTIP_WIDTH = 230;
+  // Left offset of the grid inside the outer container (weekday label column width + its padding)
+  const GRID_LEFT_OFFSET = 34;
+  // Height occupied by the month-label row above the heatmap grid (approx.)
+  const MONTH_LABEL_ROW_H = 24;
   const [hoveredCell, setHoveredCell] = useState<{ day: HeatmapDay; week: number; weekday: number } | null>(null);
   const [scrollX, setScrollX] = useState(0);
   const [calendarSize, setCalendarSize] = useState({ width: 0, height: 0 });
   const scrollRef = useRef<ScrollView | null>(null);
   const didAutoScroll = useRef(false);
   const hoveredDay = hoveredCell?.day ?? null;
-  const gridCenterOffset = Math.max(0, (calendarSize.width - 24 - 34 - GRID_WIDTH) / 2);
+  const gridCenterOffset = Math.max(0, (calendarSize.width - MONTH_LABEL_ROW_H - GRID_LEFT_OFFSET - GRID_WIDTH) / 2);
 
   const hoveredProjects = useMemo(() => {
     if (!hoveredDay) return [];
