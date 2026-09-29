@@ -37,6 +37,17 @@ export const HeatmapCalendar = React.memo(function HeatmapCalendar({ days, maxCo
   const GRID_LEFT_OFFSET = 34;
   // Height occupied by the month-label row above the heatmap grid (approx.)
   const MONTH_LABEL_ROW_H = 24;
+  // Tooltip left base: GRID_LEFT_OFFSET + CELL (skip label col + one cell width)
+  const TOOLTIP_LEFT_BASE = GRID_LEFT_OFFSET + CELL;
+  // Tooltip vertical bounds
+  const TOOLTIP_TOP_MIN = 38;
+  const TOOLTIP_TOP_MAX_BASE = 60;
+  // Weekday label column width (reused for bottom-calculation as label-row height proxy)
+  const WEEKDAY_COL_W = 34;
+  // Height per project line in tooltip
+  const PROJECT_LINE_H = 19;
+  // Outer container padding
+  const OUTER_PAD = 12;
   const [hoveredCell, setHoveredCell] = useState<{ day: HeatmapDay; week: number; weekday: number } | null>(null);
   const [scrollX, setScrollX] = useState(0);
   const [calendarSize, setCalendarSize] = useState({ width: 0, height: 0 });
@@ -74,7 +85,7 @@ export const HeatmapCalendar = React.memo(function HeatmapCalendar({ days, maxCo
   }, [days, gridStart, totalWeeks]);
 
   return (
-    <View onLayout={(event) => setCalendarSize({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })} style={{ marginBottom: 12, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface1, position: "relative" }}>
+    <View onLayout={(event) => setCalendarSize({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })} style={{ marginBottom: OUTER_PAD, padding: OUTER_PAD, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface1, position: "relative" }}>
       <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }}>
         <Text style={{ color: colors.foregroundMuted, fontSize: 11 }}>近一年每日 Agent 活动</Text>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
@@ -87,7 +98,7 @@ export const HeatmapCalendar = React.memo(function HeatmapCalendar({ days, maxCo
       </View>
 
       {hoveredCell ? (
-        <View pointerEvents="none" style={{ position: "absolute", left: (() => { const cellLeft = 46 + gridCenterOffset + hoveredCell.week * COLUMN_W - scrollX; return cellLeft + CELL + 10 + TOOLTIP_WIDTH <= calendarSize.width - 12 ? cellLeft + CELL + 10 : Math.max(12, cellLeft - TOOLTIP_WIDTH - 10); })(), top: Math.max(38, Math.min(60 + hoveredCell.weekday * ROW_H - 8, calendarSize.height - (34 + Math.max(1, hoveredProjects.length) * 19) - 12)), zIndex: 20, width: TOOLTIP_WIDTH, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface0, shadowColor: "#000", shadowOpacity: 0.22, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 10 }}>
+        <View pointerEvents="none" style={{ position: "absolute", left: (() => { const cellLeft = TOOLTIP_LEFT_BASE + gridCenterOffset + hoveredCell.week * COLUMN_W - scrollX; return cellLeft + CELL + 10 + TOOLTIP_WIDTH <= calendarSize.width - OUTER_PAD ? cellLeft + CELL + 10 : Math.max(OUTER_PAD, cellLeft - TOOLTIP_WIDTH - 10); })(), top: Math.max(TOOLTIP_TOP_MIN, Math.min(TOOLTIP_TOP_MAX_BASE + hoveredCell.weekday * ROW_H - 8, calendarSize.height - (WEEKDAY_COL_W + Math.max(1, hoveredProjects.length) * PROJECT_LINE_H) - OUTER_PAD)), zIndex: 20, width: TOOLTIP_WIDTH, paddingHorizontal: OUTER_PAD, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface0, shadowColor: "#000", shadowOpacity: 0.22, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 10 }}>
           <Text style={{ color: colors.foreground, fontSize: 11, fontWeight: "600" }}>{formatDisplayDate(hoveredCell.day.date)}</Text>
           {hoveredProjects.length > 0 ? hoveredProjects.map((project) => (
             <View key={project.id} style={{ flexDirection: "row", justifyContent: "space-between", gap: 16, marginTop: 5 }}>
@@ -99,7 +110,7 @@ export const HeatmapCalendar = React.memo(function HeatmapCalendar({ days, maxCo
       ) : null}
 
       <View style={{ flexDirection: "row", justifyContent: gridCenterOffset > 0 ? "center" : "flex-start" }}>
-        <View style={{ width: 34, paddingTop: 20 }}>
+        <View style={{ width: WEEKDAY_COL_W, paddingTop: 20 }}>
           {WEEKDAY_LABELS.map((label) => (
             <View key={label} style={{ height: ROW_H, justifyContent: "center", alignItems: "flex-end", paddingRight: 6 }}>
               <Text style={{ color: colors.foregroundMuted, fontSize: 9, lineHeight: ROW_H }}>{label}</Text>

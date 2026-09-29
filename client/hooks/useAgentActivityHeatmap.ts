@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AppState } from "react-native";
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 import type { PaseoClient } from "../workspace-creator/types";
 import type { AgentEntry } from "../../shared/overview-types";
@@ -156,10 +157,21 @@ export function useAgentActivityHeatmap(
     fetchData();
   }, [fetchData]);
 
-  // Refresh every 5 minutes
+  // Refresh every 5 minutes, but only when app is active
+  const appStateRef = useRef(AppState.currentState);
   useEffect(() => {
     const timer = setInterval(() => { void fetchData(); }, 5 * 60 * 1000);
-    return () => clearInterval(timer);
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      appStateRef.current = nextState;
+      if (nextState === "active") {
+        clearInterval(timer);
+        void fetchData();
+      }
+    });
+    return () => {
+      clearInterval(timer);
+      subscription.remove();
+    };
   }, [fetchData]);
 
   return { days, loading, error, maxCount: maxCountRef.current, hasData };
