@@ -1,19 +1,8 @@
 import React, { useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
-import type { HeatmapDay } from "../hooks/useAgentActivityHeatmap";
-import { buildHeatmapGrid, getColors, getCellColor, WEEKDAY_LABELS } from "../hooks/useAgentActivityHeatmap";
-
-type ColorLevel = "none" | "low" | "medium" | "high" | "very-high";
-
-function getColorLevel(count: number, maxCount: number): ColorLevel {
-  if (count === 0 || maxCount === 0) return "none";
-  const ratio = count / maxCount;
-  if (ratio < 0.25) return "low";
-  if (ratio < 0.5) return "medium";
-  if (ratio < 0.75) return "high";
-  return "very-high";
-}
+import type { ColorLevel, HeatmapDay } from "../hooks/useAgentActivityHeatmap";
+import { buildHeatmapGrid, getColorLevel, getColors, getCellColor, WEEKDAY_LABELS } from "../hooks/useAgentActivityHeatmap";
 
 export interface HeatmapWorkspaceMeta {
   projectId: string;

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, AppState, AppStateStatus, Pressable, ScrollView, Text, View } from "react-native";
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import type { AgentTimelineEntry } from "./agent-conversation-types";
@@ -47,10 +47,40 @@ function assistantTiming(entries: AgentTimelineEntry[], entry: AgentTimelineEntr
 
 function RunningTurnIndicator({ startedAt, color }: { startedAt: string | null; color: string }) {
   const [now, setNow] = useState(Date.now());
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
+    timerRef.current = setInterval(() => setNow(Date.now()), 1000);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = null;
+    };
   }, []);
+
+  useEffect(() => {
+    const handleAppState = (nextState: AppStateStatus) => {
+      const prev = appStateRef.current;
+      appStateRef.current = nextState;
+      if (prev !== "active" && nextState === "active") {
+        if (!timerRef.current) timerRef.current = setInterval(() => setNow(Date.now()), 1000);
+      } else if (prev === "active" && nextState !== "active") {
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+          timerRef.current = null;
+        }
+      }
+    };
+    const subscription = AppState.addEventListener("change", handleAppState);
+    return () => {
+      subscription.remove();
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, []);
+
   const elapsedSeconds = startedAt ? Math.max(0, Math.floor((now - Date.parse(startedAt)) / 1000)) : null;
   return <View accessibilityLabel={elapsedSeconds == null ? "Agent 正在工作" : `Agent 已工作 ${elapsedSeconds} 秒`} style={{ flexDirection: "row", alignItems: "center", gap: 8, minHeight: 32, marginTop: 8 }}>
     <ActivityIndicator size="small" color={color} />

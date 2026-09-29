@@ -63,7 +63,16 @@ export function getColors(theme: PluginSurfaceProps["theme"]) {
   return { ...fallback, ...theme.colors };
 }
 
-type ColorLevel = "none" | "low" | "medium" | "high" | "very-high";
+export type ColorLevel = "none" | "low" | "medium" | "high" | "very-high";
+
+export function getColorLevel(count: number, maxCount: number): ColorLevel {
+  if (count === 0 || maxCount === 0) return "none";
+  const ratio = count / maxCount;
+  if (ratio < 0.25) return "low";
+  if (ratio < 0.5) return "medium";
+  if (ratio < 0.75) return "high";
+  return "very-high";
+}
 
 export function getCellColor(level: ColorLevel, theme: PluginSurfaceProps["theme"]): string {
   const c = getColors(theme);
