@@ -90,8 +90,7 @@ export function AgentConversationPreview({
   const [cancelling, setCancelling] = useState(false);
   const [composerSelection, setComposerSelection] = useState<ComposerSelection | null>(null);
   const [providerSnapshot, setProviderSnapshot] = useState<ProviderSnapshot | null>(null);
-  const imePendingSubmitRef = useRef(false); // true: Enter pressed, waiting to see if text changes (IME confirm)
-  const imeSubmitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // timer for non-IME Enter fallback
+  const lastTextChangeRef = useRef(0);
   const [openMenu, setOpenMenu] = useState<"model" | "mode" | "thinking" | null>(null);
   const [liveStatus, setLiveStatus] = useState(agent.status);
   const [pendingPermissions, setPendingPermissions] = useState<AgentPermissionRequest[]>([]);
@@ -132,9 +131,6 @@ export function AgentConversationPreview({
   useEffect(() => {
     setQueuedState({ agentId: agent.id, messages: loadQueuedMessages(agent.id) });
   }, [agent.id]);
-  useEffect(() => () => {
-    if (imeSubmitTimerRef.current) clearTimeout(imeSubmitTimerRef.current);
-  }, []);
 
   const refresh = useCallback(async () => {
     if (loadingRef.current) return;
@@ -336,28 +332,6 @@ export function AgentConversationPreview({
       setSending(false);
     }
   }, [handle, liveStatus, pendingPermissions.length, prompt, refresh, sending, updateQueuedMessages]);
-
-  // Same as submit but takes text directly instead of reading from stale closure state
-  const submitWith = useCallback(async (text: string) => {
-    if (!text || sending || pendingPermissions.length > 0) return;
-    if (liveStatus === "running") {
-      updateQueuedMessages((current) => [...current, { id: `${Date.now()}-${current.length}`, text }]);
-      setPrompt("");
-      return;
-    }
-    setSending(true);
-    setError(null);
-    try {
-      await handle.send(text);
-      setPrompt("");
-      setLiveStatus("running");
-      setTimeout(() => void refresh(), 250);
-    } catch (sendError) {
-      setError(sendError instanceof Error ? sendError.message : String(sendError));
-    } finally {
-      setSending(false);
-    }
-  }, [handle, liveStatus, pendingPermissions.length, refresh, sending, updateQueuedMessages]);
 
   useEffect(() => {
     if (liveStatus === "running" || sending || pendingPermissions.length > 0 || queuedMessages.length === 0) return;
@@ -613,36 +587,19 @@ export function AgentConversationPreview({
             value={prompt}
             onChangeText={(text) => {
                 setPrompt(text);
-                // When Enter is pressed during IME composition, the text may not have
-                // updated yet in onKeyPress. If we detect a flag and the text changed,
-                // submit immediately. Clear the timer if it was set.
-                if (imePendingSubmitRef.current) {
-                    if (imeSubmitTimerRef.current) {
-                        clearTimeout(imeSubmitTimerRef.current);
-                        imeSubmitTimerRef.current = null;
-                    }
-                    imePendingSubmitRef.current = false;
-                    if (text.trim()) {
-                        void submitWith(text.trim());
-                    }
-                }
+                lastTextChangeRef.current = Date.now();
             }}
             onKeyPress={(event) => {
                 const key = event.nativeEvent.key;
                 if (key === "Enter") {
                     event.preventDefault();
+                    // Chinese IME 输入时 Enter 是用来选词的，不发送
+                    // 如果文字刚被改过（比如正在打拼音），就跳过
+                    if (commandQuery === null && Date.now() - lastTextChangeRef.current < 200) {
+                        return;
+                    }
                     if (commandQuery === null) {
-                        // Mark that we're waiting for potential IME text update.
-                        // Start a short timer as fallback: if no onChangeText fires within
-                        // 150ms, it was a normal Enter press — submit the current prompt.
-                        imePendingSubmitRef.current = true;
-                        imeSubmitTimerRef.current = setTimeout(() => {
-                            imeSubmitTimerRef.current = null;
-                            if (imePendingSubmitRef.current) {
-                                imePendingSubmitRef.current = false;
-                                if (prompt.trim()) void submitWith(prompt.trim());
-                            }
-                        }, 150);
+                        if (prompt.trim()) void submit();
                         return;
                     }
                     if (matchingCommands[activeCommandIndex]) {
