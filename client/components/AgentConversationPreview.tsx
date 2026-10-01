@@ -90,7 +90,6 @@ export function AgentConversationPreview({
   const [cancelling, setCancelling] = useState(false);
   const [composerSelection, setComposerSelection] = useState<ComposerSelection | null>(null);
   const [providerSnapshot, setProviderSnapshot] = useState<ProviderSnapshot | null>(null);
-  const lastTextChangeRef = useRef(0);
   const [openMenu, setOpenMenu] = useState<"model" | "mode" | "thinking" | null>(null);
   const [liveStatus, setLiveStatus] = useState(agent.status);
   const [pendingPermissions, setPendingPermissions] = useState<AgentPermissionRequest[]>([]);
@@ -581,23 +580,18 @@ export function AgentConversationPreview({
             placeholder="继续跟进这个 Agent…"
             theme={theme}
             autoFocus
+            inputNativeID={`workspace-overview-agent-prompt-${agent.id}`}
             disabled={sending || configPending || pendingPermissions.length > 0}
             showAgentControls
             pendingLabel={sending ? "Sending" : pendingPermissions.length > 0 ? "请先处理上方请求" : null}
             value={prompt}
-            onChangeText={(text) => {
-                setPrompt(text);
-                lastTextChangeRef.current = Date.now();
-            }}
+            onChangeText={setPrompt}
             onKeyPress={(event) => {
                 const key = event.nativeEvent.key;
                 if (key === "Enter") {
+                    const nativeEvent = event.nativeEvent as typeof event.nativeEvent & { isComposing?: boolean; keyCode?: number };
+                    if (nativeEvent.isComposing || nativeEvent.keyCode === 229) return;
                     event.preventDefault();
-                    // Chinese IME 输入时 Enter 是用来选词的，不发送
-                    // 如果文字刚被改过（比如正在打拼音），就跳过
-                    if (commandQuery === null && Date.now() - lastTextChangeRef.current < 200) {
-                        return;
-                    }
                     if (commandQuery === null) {
                         if (prompt.trim()) void submit();
                         return;
