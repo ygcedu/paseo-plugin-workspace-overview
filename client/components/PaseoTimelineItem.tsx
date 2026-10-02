@@ -142,6 +142,6 @@ export function PaseoTimelineItem({ entry, theme, durationMs, completedAt, rewin
     return <View style={styles.error}><Icon name={item.level === "error" ? "CircleX" : item.level === "warning" ? "TriangleAlert" : "Info"} color={color} size={16} /><Text selectable style={[styles.errorText, { color }]}>{item.message}</Text></View>;
   }
   if (item.type === "plugin") return <PaseoStreamBadge label={`Plugin · ${item.kind}`} icon="Puzzle" detail={item.data} theme={theme} />;
-  if (item.type === "compaction") return <View style={styles.compact}><View style={styles.compactLine} /><Icon name="Scissors" color={theme.colors.foregroundMuted} size={12} /><Text style={styles.compactText}>Context compacted</Text><View style={styles.compactLine} /></View>;
+  if (item.type === "compaction") return <View style={styles.compact}><View style={styles.compactLine} /><Icon name="Scissors" color={theme.colors.foregroundMuted} size={12} /><Text style={styles.compactText}>上下文已压缩</Text><View style={styles.compactLine} /></View>;
   return null;
 }
