@@ -14,9 +14,19 @@ type ClipboardEventLike = {
   clipboardData?: { items?: ArrayLike<ClipboardItemLike> | null } | null;
   preventDefault(): void;
 };
+type KeyboardEventLike = {
+  key: string;
+  isComposing: boolean;
+  keyCode: number;
+  stopPropagation(): void;
+};
+type ElementListener =
+  | ((event: ClipboardEventLike) => void)
+  | ((event: KeyboardEventLike) => void)
+  | (() => void);
 type ElementLike = {
-  addEventListener(type: string, listener: (event: ClipboardEventLike) => void): void;
-  removeEventListener(type: string, listener: (event: ClipboardEventLike) => void): void;
+  addEventListener(type: string, listener: ElementListener, capture?: boolean): void;
+  removeEventListener(type: string, listener: ElementListener, capture?: boolean): void;
 };
 type DocumentLike = {
   addEventListener(type: string, listener: (event: PointerLike) => void): void;
@@ -93,6 +103,29 @@ export function subscribeToImagePaste(
 
   element.addEventListener("paste", handlePaste);
   return () => element.removeEventListener("paste", handlePaste);
+}
+
+export function subscribeToImeEnter(inputNativeID: string): () => void {
+  if (Platform.OS !== "web" || typeof document === "undefined") return () => {};
+  const input = document.getElementById(inputNativeID);
+  if (!input) return () => {};
+  let composing = false;
+  const start = () => { composing = true; };
+  const end = () => { composing = false; };
+  const keydown = (event: KeyboardEventLike) => {
+    if (event.key === "Enter" && (composing || event.isComposing || event.keyCode === 229)) {
+      // Keep the IME candidate selection; don't let React submit it.
+      event.stopPropagation();
+    }
+  };
+  input.addEventListener("compositionstart", start);
+  input.addEventListener("compositionend", end);
+  input.addEventListener("keydown", keydown, true);
+  return () => {
+    input.removeEventListener("compositionstart", start);
+    input.removeEventListener("compositionend", end);
+    input.removeEventListener("keydown", keydown, true);
+  };
 }
 
 export function pointerX(event: unknown): number | null {

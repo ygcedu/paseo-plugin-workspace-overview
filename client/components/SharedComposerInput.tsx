@@ -18,7 +18,7 @@ import type {
   ProviderSnapshot,
 } from "../workspace-creator/types";
 import { createComposerStyles } from "./workspace-creator-styles";
-import { subscribeToImagePaste, type PastedImage } from "../web";
+import { subscribeToImagePaste, subscribeToImeEnter, type PastedImage } from "../web";
 
 function getColors(theme: PluginSurfaceProps["theme"]) {
   if (!theme || !theme.colors) {
@@ -237,28 +237,7 @@ export function SharedComposerInput({
     (message) => onPasteError?.(message),
   ), [images, inputNativeID, onImagesChange, onPasteError]);
 
-  useEffect(() => {
-    if (Platform.OS !== "web") return;
-    const input = document.getElementById(inputNativeID);
-    if (!input) return;
-    let composing = false;
-    const start = () => { composing = true; };
-    const end = () => { composing = false; };
-    const keydown = (event: KeyboardEvent) => {
-      if (event.key === "Enter" && (composing || event.isComposing || event.keyCode === 229)) {
-        // Keep the candidate selection with the IME; don't let React submit it.
-        event.stopPropagation();
-      }
-    };
-    input.addEventListener("compositionstart", start);
-    input.addEventListener("compositionend", end);
-    input.addEventListener("keydown", keydown, true);
-    return () => {
-      input.removeEventListener("compositionstart", start);
-      input.removeEventListener("compositionend", end);
-      input.removeEventListener("keydown", keydown, true);
-    };
-  }, [inputNativeID]);
+  useEffect(() => subscribeToImeEnter(inputNativeID), [inputNativeID]);
 
   return (
     <View style={[styles.inputWrapper, composerMenuOpen && styles.menuRegionActive]}>
