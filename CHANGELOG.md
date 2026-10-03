@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/ygcedu/paseo-plugin-workspace-overview/compare/v1.1.1...v1.1.2) (2026-10-03)
+
+
+### Bug Fixes
+
+* setup-node 加回 registry-url，让 NODE_AUTH_TOKEN 自动写入 .npmrc（无需手写） ([a86a319](https://github.com/ygcedu/paseo-plugin-workspace-overview/commit/a86a31938b882e51dff21deba022eb76d588df77))
+
 ## [1.1.1](https://github.com/ygcedu/paseo-plugin-workspace-overview/compare/v1.1.0...v1.1.1) (2026-10-03)
 
 
