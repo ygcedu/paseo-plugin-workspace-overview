@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/ygcedu/paseo-plugin-workspace-overview/compare/v1.1.0...v1.1.1) (2026-10-03)
+
+
+### Bug Fixes
+
+* 加 publishConfig.access=public 防止 scoped 包被默认发成私有 ([cc4e3dc](https://github.com/ygcedu/paseo-plugin-workspace-overview/commit/cc4e3dcf39595d2db5f6a0dab1a52bce813d7a28))
+
 ## [1.1.0](https://github.com/ygcedu/paseo-plugin-workspace-overview/compare/v1.0.0...v1.1.0) (2026-10-03)
 
 
