@@ -26,5 +26,8 @@
   ],
   "repository": {
     "url": "git+https://github.com/ygcedu/paseo-plugin-workspace-overview.git"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
